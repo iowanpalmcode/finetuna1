@@ -199,14 +199,35 @@ function createTraitBadge(trait) {
         badge.classList.remove('dragging');
     });
 
-    // Double-click/double-tap adds the trait directly, for touch devices where dragging is awkward
-    badge.addEventListener('dblclick', () => {
+    // Double-click/double-tap adds the trait directly, for touch devices where dragging is awkward.
+    // Mobile browsers don't reliably synthesize a native 'dblclick' from two taps, so double-taps are
+    // detected manually from the timing between taps instead. This is driven off 'touchend' rather
+    // than 'click' because most mobile browsers suppress the synthetic click that normally follows a
+    // touch if the tap happens shortly after the page was scrolled - and scrolling to find a trait
+    // before double-tapping it is exactly the common case here. touchend fires regardless, so we
+    // preventDefault() there to stop the (unreliable) ghost click, and keep the 'click' listener only
+    // as the desktop/mouse path.
+    let lastTapTime = 0;
+    const handleDoubleTap = (e) => {
+        if (e.target.closest('.trait-favorite-btn')) return;
+
+        const now = Date.now();
+        const isDoubleTap = now - lastTapTime < 400;
+        lastTapTime = now;
+
+        if (!isDoubleTap) return;
+        lastTapTime = 0;
+        if (e.cancelable) e.preventDefault();
+
         if (!currentAgentId) {
             showError('Please create an agent first');
             return;
         }
         addTraitToAgent(trait.name);
-    });
+    };
+
+    badge.addEventListener('touchend', handleDoubleTap);
+    badge.addEventListener('click', handleDoubleTap);
 
     badge.querySelector('.trait-favorite-btn').addEventListener('click', (e) => {
         e.stopPropagation();

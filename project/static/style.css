@@ -8,8 +8,10 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: #f5f5f5;
     min-height: 100vh;
+    min-height: 100dvh;
     padding: 20px;
     color: #333;
+    overflow-x: hidden;
 }
 
 .container {
@@ -22,6 +24,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    min-height: 100dvh;
 }
 
 /* Header */
@@ -231,10 +234,11 @@ body {
 
 .past-agents-select {
     flex: 1;
+    min-width: 0;
     padding: 8px 10px;
     border: 1px solid #ccc;
     border-radius: 4px;
-    font-size: 0.95em;
+    font-size: 16px;
     background: white;
     color: #333;
 }
@@ -269,7 +273,7 @@ body {
     margin-bottom: 15px;
     border: 1px solid #ccc;
     border-radius: 4px;
-    font-size: 0.95em;
+    font-size: 16px;
     transition: border-color 0.2s;
 }
 
@@ -349,10 +353,14 @@ body {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     animation: slideIn 0.3s ease;
     font-size: 0.9em;
+    max-width: 100%;
 }
 
 .agent-trait .trait-name {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -673,8 +681,16 @@ body {
         grid-template-columns: 1fr;
     }
 
+    /* On a single column, show the agent builder before the (long) traits
+       list so mobile users reach "Create Agent" without scrolling past
+       every trait badge first. */
     .builder-section {
         grid-column: 1;
+        order: 1;
+    }
+
+    .traits-section {
+        order: 2;
     }
 
     .output-comparison {
@@ -692,9 +708,21 @@ body {
 }
 
 @media (max-width: 600px) {
+    body {
+        padding: 10px;
+    }
+
+    .header {
+        padding: 20px 15px;
+    }
+
     .main {
         padding: 20px;
         gap: 20px;
+    }
+
+    .section, .builder-content {
+        padding: 15px;
     }
 
     .agent-name-group {
@@ -719,6 +747,41 @@ body {
 
     .trait-badge {
         flex: 0 1 calc(50% - 4px);
+        min-width: 0;
+    }
+
+    .trait-badge span:nth-child(2) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .btn-collapse, .btn-icon {
+        min-height: 36px;
+        min-width: 36px;
+    }
+
+    .drop-zone {
+        padding: 20px;
+        min-height: 150px;
+    }
+
+    .output-comparison {
+        gap: 10px;
+    }
+}
+
+@media (max-width: 400px) {
+    .header-content h1 {
+        font-size: 1.4em;
+    }
+
+    .header-content p {
+        font-size: 0.95em;
+    }
+
+    .trait-badge {
+        flex: 0 1 100%;
     }
 }
 
