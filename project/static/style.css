@@ -77,6 +77,43 @@ body {
 }
 
 /* Traits Section */
+.traits-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.btn-collapse {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    line-height: 1;
+    font-size: 1em;
+    color: #555;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-collapse:hover {
+    background: #e8e8e8;
+    border-color: #999;
+}
+
+.favorites-bar {
+    display: none;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.favorites-empty {
+    color: #999;
+    font-size: 0.9em;
+    font-style: italic;
+}
+
 .traits-list {
     display: flex;
     flex-wrap: wrap;
@@ -97,6 +134,7 @@ body {
     align-items: center;
     gap: 6px;
     font-size: 0.9em;
+    touch-action: manipulation;
 }
 
 .trait-badge:hover {
@@ -112,6 +150,24 @@ body {
 
 .trait-emoji {
     font-size: 1.2em;
+}
+
+.trait-favorite-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1em;
+    color: #bbb;
+    padding: 0;
+    line-height: 1;
+}
+
+.trait-favorite-btn:hover {
+    color: #f5a623;
+}
+
+.trait-favorite-btn.active {
+    color: #f5a623;
 }
 
 .loading {
@@ -181,6 +237,24 @@ body {
     font-size: 0.95em;
     background: white;
     color: #333;
+}
+
+.btn-icon {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 0.9em;
+    color: #666;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.btn-icon:hover {
+    background: #fde8e8;
+    border-color: #e57373;
+    color: #c62828;
 }
 
 .past-agents-select:focus {
@@ -629,6 +703,14 @@ body {
 
     .agent-name-input {
         width: 100%;
+    }
+
+    .past-agents-group {
+        flex-wrap: wrap;
+    }
+
+    .past-agents-select {
+        flex-basis: 100%;
     }
 
     .traits-list {

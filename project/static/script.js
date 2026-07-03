@@ -2,6 +2,7 @@
 let currentAgentId = null;
 let availableTraits = [];
 let draggedTrait = null;
+let favoriteTraits = new Set(); // session-only, cleared on reload
 
 // Rotating example prompts shown above the prompt textarea
 const PROMPT_SUGGESTIONS = [
@@ -66,6 +67,11 @@ function setupEventListeners() {
     document.getElementById('traitSearch').addEventListener('input', (e) => {
         filterTraits(e.target.value);
     });
+
+    document.getElementById('toggleTraitsBtn').addEventListener('click', toggleTraitsCollapse);
+
+    document.getElementById('deleteAgentBtn').addEventListener('click', deleteSelectedAgent);
+    document.getElementById('clearAgentsBtn').addEventListener('click', clearAllAgents);
 
     document.getElementById('pastAgentsSelect').addEventListener('change', (e) => {
         if (e.target.value) {
@@ -159,30 +165,106 @@ async function loadTraits() {
 function renderTraits() {
     const container = document.getElementById('traitsContainer');
     container.innerHTML = '';
-    
+
     availableTraits.forEach(trait => {
-        const badge = document.createElement('div');
-        badge.className = 'trait-badge';
-        badge.draggable = true;
-        badge.dataset.name = trait.name.toLowerCase();
-        badge.dataset.description = (trait.description || '').toLowerCase();
-        badge.innerHTML = `
-            <span class="trait-emoji">${trait.icon}</span>
-            <span>${trait.name}</span>
-        `;
-        
-        badge.addEventListener('dragstart', (e) => {
-            draggedTrait = trait;
-            badge.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'copy';
-        });
-        
-        badge.addEventListener('dragend', () => {
-            badge.classList.remove('dragging');
-        });
-        
+        const badge = createTraitBadge(trait);
         container.appendChild(badge);
     });
+
+    renderFavoritesBar();
+}
+
+// Build a single draggable trait badge, including its favorite star toggle
+function createTraitBadge(trait) {
+    const badge = document.createElement('div');
+    badge.className = 'trait-badge';
+    badge.draggable = true;
+    badge.dataset.name = trait.name.toLowerCase();
+    badge.dataset.description = (trait.description || '').toLowerCase();
+
+    const isFavorite = favoriteTraits.has(trait.name);
+    badge.innerHTML = `
+        <span class="trait-emoji">${trait.icon}</span>
+        <span>${trait.name}</span>
+        <button type="button" class="trait-favorite-btn ${isFavorite ? 'active' : ''}" title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">${isFavorite ? '★' : '☆'}</button>
+    `;
+
+    badge.addEventListener('dragstart', (e) => {
+        draggedTrait = trait;
+        badge.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'copy';
+    });
+
+    badge.addEventListener('dragend', () => {
+        badge.classList.remove('dragging');
+    });
+
+    // Double-click/double-tap adds the trait directly, for touch devices where dragging is awkward
+    badge.addEventListener('dblclick', () => {
+        if (!currentAgentId) {
+            showError('Please create an agent first');
+            return;
+        }
+        addTraitToAgent(trait.name);
+    });
+
+    badge.querySelector('.trait-favorite-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFavoriteTrait(trait.name);
+    });
+
+    return badge;
+}
+
+// Toggle a trait's favorite status and refresh the badges/favorites bar
+function toggleFavoriteTrait(traitName) {
+    if (favoriteTraits.has(traitName)) {
+        favoriteTraits.delete(traitName);
+    } else {
+        favoriteTraits.add(traitName);
+    }
+
+    const container = document.getElementById('traitsContainer');
+    container.innerHTML = '';
+    availableTraits.forEach(trait => container.appendChild(createTraitBadge(trait)));
+
+    const searchQuery = document.getElementById('traitSearch').value;
+    if (searchQuery) filterTraits(searchQuery);
+
+    renderFavoritesBar();
+}
+
+// Render the compact favorites bar shown when the traits list is collapsed
+function renderFavoritesBar() {
+    const favBar = document.getElementById('favoritesBar');
+    favBar.innerHTML = '';
+
+    const favorites = availableTraits.filter(t => favoriteTraits.has(t.name));
+
+    if (favorites.length === 0) {
+        favBar.innerHTML = '<span class="favorites-empty">☆ a trait to pin it here when collapsed</span>';
+        return;
+    }
+
+    favorites.forEach(trait => {
+        favBar.appendChild(createTraitBadge(trait));
+    });
+}
+
+// Collapse/expand the full traits list, swapping in the favorites-only bar
+function toggleTraitsCollapse() {
+    const container = document.getElementById('traitsContainer');
+    const search = document.getElementById('traitSearch');
+    const favBar = document.getElementById('favoritesBar');
+    const btn = document.getElementById('toggleTraitsBtn');
+
+    const collapsing = container.style.display !== 'none';
+
+    container.style.display = collapsing ? 'none' : '';
+    search.style.display = collapsing ? 'none' : '';
+    favBar.style.display = collapsing ? 'flex' : 'none';
+    btn.textContent = collapsing ? '▸' : '▾';
+    btn.title = collapsing ? 'Expand' : 'Collapse';
 }
 
 // Handle drag over
@@ -363,6 +445,64 @@ async function removeTraitFromAgent(traitName) {
     } catch (error) {
         showError('Error removing trait: ' + error.message);
     }
+}
+
+// Delete the agent currently selected in the Past Agents dropdown
+async function deleteSelectedAgent() {
+    const select = document.getElementById('pastAgentsSelect');
+    const agentId = select.value;
+
+    if (!agentId) {
+        showError('Select a past agent to delete');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/agents/${agentId}/delete`, { method: 'DELETE' });
+        const data = await response.json();
+
+        if (data.success) {
+            if (agentId === currentAgentId) {
+                resetAgentBuilder();
+            }
+            await loadPastAgents();
+            showSuccess('Agent deleted');
+        } else {
+            showError('Failed to delete agent: ' + data.error);
+        }
+    } catch (error) {
+        showError('Error deleting agent: ' + error.message);
+    }
+}
+
+// Delete every agent for this browser
+async function clearAllAgents() {
+    if (!confirm('Delete all agents? This cannot be undone.')) return;
+
+    try {
+        const response = await fetch('/api/agents', { method: 'DELETE' });
+        const data = await response.json();
+
+        if (data.success) {
+            resetAgentBuilder();
+            await loadPastAgents();
+            showSuccess('All agents cleared');
+        } else {
+            showError('Failed to clear agents: ' + data.error);
+        }
+    } catch (error) {
+        showError('Error clearing agents: ' + error.message);
+    }
+}
+
+// Reset the builder UI back to its empty/no-agent state
+function resetAgentBuilder() {
+    currentAgentId = null;
+    document.getElementById('agentName').value = 'MyAgent';
+    document.getElementById('agentTraits').innerHTML = '';
+    document.getElementById('agentSummary').style.display = 'none';
+    document.getElementById('outputSection').style.display = 'none';
+    document.getElementById('generateBtn').disabled = true;
 }
 
 // Update agent summary

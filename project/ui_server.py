@@ -3,10 +3,13 @@ Web UI Server for AI Agent Framework
 Provides REST API and serves interactive UI for the personality trait system.
 """
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session
 import json
 import os
+import secrets
 import sys
+import uuid
+from datetime import timedelta
 from pathlib import Path
 
 # Add project to path
@@ -19,14 +22,29 @@ app = Flask(__name__,
             static_folder='static',
             template_folder='templates')
 
-# Store active agents in memory (in production, use a database)
-agents = {}
+# Signs the session cookie that scopes each browser to its own agents below.
+# Falls back to a fresh random key per process start (existing sessions are
+# invalidated on restart) unless SECRET_KEY is set in the environment.
+app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+app.permanent_session_lifetime = timedelta(days=30)
+
+# Store active agents in memory, keyed by browser session id so different
+# browsers/users never see each other's agents (in production, use a database).
+agents_by_session = {}
 agent_counter = 0
 
 # Basic resource limits to avoid unbounded memory growth from repeated requests
 MAX_AGENTS = 500
 MAX_AGENT_NAME_LENGTH = 100
 MAX_PROMPT_LENGTH = 5000
+
+
+def get_session_agents():
+    """Return the agents dict belonging to the current browser session."""
+    if 'uid' not in session:
+        session['uid'] = uuid.uuid4().hex
+        session.permanent = True
+    return agents_by_session.setdefault(session['uid'], {})
 
 
 @app.after_request
@@ -93,6 +111,7 @@ def get_available_traits():
 def list_agents():
     """List all agents created in this session."""
     try:
+        agents = get_session_agents()
         agent_list = [
             {
                 'agent_id': agent_id,
@@ -111,6 +130,7 @@ def create_agent():
     """Create a new agent."""
     try:
         global agent_counter
+        agents = get_session_agents()
 
         if len(agents) >= MAX_AGENTS:
             return jsonify({'success': False, 'error': 'Agent limit reached. Delete an existing agent first.'}), 400
@@ -139,6 +159,7 @@ def create_agent():
 def add_trait_to_agent(agent_id):
     """Add a trait to an agent."""
     try:
+        agents = get_session_agents()
         if agent_id not in agents:
             return jsonify({'success': False, 'error': 'Agent not found'}), 404
         
@@ -166,6 +187,7 @@ def add_trait_to_agent(agent_id):
 def adjust_trait_on_agent(agent_id, trait_name):
     """Adjust the intensity (and/or weight) of a trait already on an agent."""
     try:
+        agents = get_session_agents()
         if agent_id not in agents:
             return jsonify({'success': False, 'error': 'Agent not found'}), 404
 
@@ -196,6 +218,7 @@ def adjust_trait_on_agent(agent_id, trait_name):
 def remove_trait_from_agent(agent_id, trait_name):
     """Remove a trait from an agent."""
     try:
+        agents = get_session_agents()
         if agent_id not in agents:
             return jsonify({'success': False, 'error': 'Agent not found'}), 404
         
@@ -220,6 +243,7 @@ def remove_trait_from_agent(agent_id, trait_name):
 def get_agent_profile(agent_id):
     """Get agent's behavioral profile."""
     try:
+        agents = get_session_agents()
         if agent_id not in agents:
             return jsonify({'success': False, 'error': 'Agent not found'}), 404
         
@@ -238,6 +262,7 @@ def get_agent_profile(agent_id):
 def generate_response(agent_id):
     """Generate a response through the agent's personality."""
     try:
+        agents = get_session_agents()
         if agent_id not in agents:
             return jsonify({'success': False, 'error': 'Agent not found'}), 404
         
@@ -273,10 +298,22 @@ def generate_response(agent_id):
 def delete_agent(agent_id):
     """Delete an agent."""
     try:
+        agents = get_session_agents()
         if agent_id not in agents:
             return jsonify({'success': False, 'error': 'Agent not found'}), 404
-        
+
         del agents[agent_id]
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/agents', methods=['DELETE'])
+def clear_agents():
+    """Delete every agent belonging to the current browser session."""
+    try:
+        agents = get_session_agents()
+        agents.clear()
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
