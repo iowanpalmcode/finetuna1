@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - AI Agent Personality Builder</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1>🔒 Privacy Policy</h1>
+                <p>Last updated: 2026-07-02</p>
+            </div>
+        </header>
+
+        <main class="main legal-main">
+            <section class="section legal-section">
+                <p><a href="{{ url_for('index') }}">&larr; Back to the app</a></p>
+
+                <h2>1. What data this tool handles</h2>
+                <p>When you use this tool, the following is sent to the server so it can respond:
+                the agent name you type, the traits you choose and their intensity, and any prompt
+                text you enter to generate a response.</p>
+
+                <h2>2. How it's stored</h2>
+                <p>All of this is kept only in the server's in-memory process state. Nothing is
+                written to a database or to disk, and nothing is retained after the server
+                process restarts or stops.</p>
+
+                <h2>3. No third-party sharing</h2>
+                <p>This tool does not send your data to any third-party service, analytics
+                provider, or advertising network. There are no tracking scripts, cookies, or
+                external calls made on your behalf.</p>
+
+                <h2>4. No accounts or personal identifiers</h2>
+                <p>There is no login system, and the tool does not knowingly collect names, email
+                addresses, or other personal identifiers beyond whatever text you choose to type
+                into the agent-name or prompt fields.</p>
+
+                <h2>5. Server logs</h2>
+                <p>Like most web servers, the underlying framework may write basic request logs
+                (e.g., timestamps, paths, status codes) to its own console/log output for
+                debugging. These logs are local to whoever is running the server and are not
+                transmitted elsewhere by this application.</p>
+
+                <h2>6. Your choices</h2>
+                <p>Because nothing is persisted, you can clear your data at any time simply by not
+                creating new agents, or by restarting the server, which discards all in-memory
+                state.</p>
+
+                <h2>7. Changes</h2>
+                <p>If how this tool handles data changes in the future (for example, if persistent
+                storage is added), this policy will be updated to reflect that.</p>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>AI Agent Framework with Modular Personality System</p>
+            <p class="footer-links">
+                <a href="{{ url_for('index') }}">Home</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('about') }}">About</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('terms') }}">Terms of Service</a>
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

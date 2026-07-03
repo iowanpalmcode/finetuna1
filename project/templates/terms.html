@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service - AI Agent Personality Builder</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1>📄 Terms of Service</h1>
+                <p>Last updated: 2026-07-02</p>
+            </div>
+        </header>
+
+        <main class="main legal-main">
+            <section class="section legal-section">
+                <p><a href="{{ url_for('index') }}">&larr; Back to the app</a></p>
+
+                <h2>1. What this is</h2>
+                <p>The AI Agent Personality Builder is a demo tool for experimenting with a modular
+                personality-trait system. It lets you combine traits and see how they would
+                influence example text responses. It is provided for educational and experimental
+                use, "as is," with no warranty of any kind.</p>
+
+                <h2>2. No accounts, no persistence</h2>
+                <p>There is no login or user account system. Agents you create exist only in the
+                server's memory for as long as the process keeps running, and are permanently
+                lost when the server restarts. Do not rely on this tool to store anything you
+                need to keep.</p>
+
+                <h2>3. Acceptable use</h2>
+                <p>Don't use this tool to generate or distribute content that is illegal, abusive,
+                or intended to harass or deceive others. Don't attempt to disrupt, overload, or gain
+                unauthorized access to the server or other users' data.</p>
+
+                <h2>4. No professional advice</h2>
+                <p>Generated text is produced by simple, rule-based transformations and does not
+                constitute professional, legal, medical, or financial advice.</p>
+
+                <h2>5. Changes</h2>
+                <p>These terms may be updated as the project evolves. Continued use of the tool
+                after a change means you accept the updated terms.</p>
+
+                <h2>6. Liability</h2>
+                <p>The maintainers of this project are not liable for any damages arising from use
+                or inability to use this tool, to the fullest extent permitted by law.</p>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>AI Agent Framework with Modular Personality System</p>
+            <p class="footer-links">
+                <a href="{{ url_for('index') }}">Home</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('about') }}">About</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('privacy') }}">Privacy Policy</a>
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# Netlify deployment config.
+#
+# Netlify Functions are stateless/ephemeral by design: each invocation may run
+# in a fresh container, so the in-memory `agents` dict in ui_server.py is not
+# guaranteed to persist between requests here the way it does on a
+# long-running server (see render.yaml for that). This config is a best-effort
+# way to preview the app on Netlify; for real multi-request sessions, prefer
+# Render or another always-on host.
+
+[build]
+  publish = "static"
+  functions = "netlify/functions"
+
+[functions]
+  included_files = [
+    "templates/**",
+    "static/**",
+    "traits/**",
+    "interactions/**",
+    "agent.py",
+    "trait_manager.py",
+    "ui_server.py",
+  ]
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/app"
+  status = 200

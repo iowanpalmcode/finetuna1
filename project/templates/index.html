@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIMotional</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1>🎭🎭 AIMotional</h1>
+                <p>Drag traits to create unique agent personalities</p>
+            </div>
+        </header>
+
+        <main class="main">
+            <!-- Available Traits Section -->
+            <section class="section traits-section">
+                <h2>Available Emotions & Traits</h2>
+                <p class="subtitle">Drag to add to your agent</p>
+                <input type="text" id="traitSearch" class="trait-search-input" placeholder="🔍 Search emotions or traits...">
+                <div id="traitsContainer" class="traits-list">
+                    <div class="loading">Loading traits...</div>
+                </div>
+            </section>
+
+            <!-- Agent Builder Section -->
+            <section class="section builder-section">
+                <div class="builder-content">
+                    <!-- Agent Info -->
+                    <div class="agent-info">
+                        <h2>Your Agent</h2>
+                        <div class="agent-name-group">
+                            <input type="text" id="agentName" placeholder="Enter agent name" class="agent-name-input" value="MyAgent">
+                            <button id="createAgentBtn" class="btn btn-primary">Create Agent</button>
+                        </div>
+                        <div class="past-agents-group">
+                            <label for="pastAgentsSelect" class="past-agents-label">Past Agents</label>
+                            <select id="pastAgentsSelect" class="past-agents-select">
+                                <option value="">-- Select a past agent --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Drop Zone for Traits -->
+                    <div class="drop-zone" id="dropZone">
+                        <div class="drop-zone-placeholder">
+                            <div class="drop-zone-icon">📥</div>
+                            <div class="drop-zone-text">Drag traits here</div>
+                            <div class="drop-zone-subtext">Drop emotions to add them to your agent</div>
+                        </div>
+                        <div id="agentTraits" class="agent-traits"></div>
+                    </div>
+
+                    <!-- Agent Summary -->
+                    <div id="agentSummary" class="agent-summary" style="display: none;">
+                        <h3>Personality Profile</h3>
+                        <p id="summaryText"></p>
+                    </div>
+                </div>
+
+                <!-- Prompt Section -->
+                <div class="prompt-section">
+                    <h2>Generate Response</h2>
+                    <div class="prompt-input-group">
+                        <textarea id="promptInput"
+                                  class="prompt-input"
+                                  placeholder="Enter a base response or prompt...&#10;Example: 'I will help you with this task.'"
+                                  rows="3"></textarea>
+                    </div>
+                    <div class="prompt-suggestion" id="promptSuggestion">
+                        <span class="prompt-suggestion-label">💡 Try:</span>
+                        <button type="button" id="suggestionChip" class="suggestion-chip"></button>
+                    </div>
+                    <button id="generateBtn" class="btn btn-success" disabled>
+                        ✨ Generate Personality Response
+                    </button>
+                </div>
+
+                <!-- Response Output Section -->
+                <div id="outputSection" class="output-section" style="display: none;">
+                    <h2>Generated Response</h2>
+                    
+                    <div class="output-comparison">
+                        <div class="output-box original">
+                            <h3>Original</h3>
+                            <p id="originalText"></p>
+                        </div>
+                        <div class="output-arrow">→</div>
+                        <div class="output-box modified">
+                            <h3>With Personality</h3>
+                            <p id="modifiedText"></p>
+                        </div>
+                    </div>
+                    
+                    <div class="output-traits">
+                        <h4>Active Traits in this Response:</h4>
+                        <div id="outputTraits" class="traits-display"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>AI Agent Framework with Modular Personality System</p>
+            <p class="footer-links">
+                <a href="{{ url_for('about') }}">About</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('terms') }}">Terms of Service</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('privacy') }}">Privacy Policy</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

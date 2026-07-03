@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - AIMotional</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1>🎭🎭 About AIMotional</h1>
+                <p>A modular personality-trait playground for AI agents</p>
+            </div>
+        </header>
+
+        <main class="main legal-main">
+            <section class="section legal-section">
+                <p><a href="{{ url_for('index') }}">&larr; Back to the app</a></p>
+
+                <h2>What this is</h2>
+                <p>AIMotional is a small, experimental tool for exploring how combining personality
+                traits (like Confident, Calm, Aggressive, or Playful) could shape the tone of a
+                response. Drag traits onto an agent, tune how strongly each one applies, and see a
+                side-by-side comparison of the original text versus the "personality-modified"
+                version. It's built on a modular trait system where each trait is an independent,
+                swappable module rather than a single hardcoded behavior.</p>
+
+                <h2>About me</h2>
+                <p>Hi, I'm Felix — I built AIMotional as a hands-on project for experimenting with
+                modular, composable personality systems. You can find more of my work on GitHub:</p>
+                <p>
+                    <a href="https://github.com/iowanpalmcode/" target="_blank" rel="noopener noreferrer">
+                        github.com/iowanpalmcode
+                    </a>
+                </p>
+
+                <h2>Feedback</h2>
+                <p>This is a work in progress — if something looks off or you have ideas for new
+                traits, feel free to send me an email at f.odunayo.pro@gmail.com.</p>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>AI Agent Framework with Modular Personality System</p>
+            <p class="footer-links">
+                <a href="{{ url_for('index') }}">Home</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('about') }}">About</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('terms') }}">Terms of Service</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('privacy') }}">Privacy Policy</a>
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
