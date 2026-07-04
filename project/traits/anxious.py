@@ -30,6 +30,13 @@ def _lower_first(fragment: str) -> str:
     return fragment[0].lower() + fragment[1:]
 
 
+def _upper_first(fragment: str) -> str:
+    """Capitalize a fragment's leading letter, e.g. when it starts a new sentence."""
+    if not fragment:
+        return fragment
+    return fragment[0].upper() + fragment[1:]
+
+
 class Anxious(BaseTrait):
     """
     Anxious trait: Worried and stressed, anticipates problems,
@@ -68,7 +75,7 @@ class Anxious(BaseTrait):
     def _prefix_worry_opener(self, text: str) -> Optional[str]:
         if text.lower().startswith(("what if", "i'm worried", "i am worried")):
             return None
-        return "What if this goes wrong? " + _lower_first(text)
+        return "What if this goes wrong? " + _upper_first(text)
 
     def _append_worry_question(self, text: str) -> Optional[str]:
         if "what could go wrong" in text.lower():
@@ -82,8 +89,9 @@ class Anxious(BaseTrait):
         if not sentences:
             return None
         first = sentences[0].rstrip()
-        if first and first[-1] in ".!?":
-            sentences[0] = first[:-1] + " (I hope that's right)" + first[-1]
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            sentences[0] = match.group(1) + " (I hope that's right)" + match.group(2)
         else:
             sentences[0] = first + " (I hope that's right)"
         return " ".join(sentences)

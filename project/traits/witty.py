@@ -55,7 +55,7 @@ class Witty(BaseTrait):
             lambda t: _replace_word(t, "problem", "delightful puzzle"),
             lambda t: _replace_word(t, "good", "delightfully good"),
             lambda t: _replace_word(t, "bad", "amusingly inconvenient"),
-            lambda t: _replace_word(t, "think", "suspect, in my infinite wisdom"),
+            lambda t: _replace_word(t, "think", "suspect, in my infinite wisdom, that"),
             self._prefix_playful_framing,
             self._append_flair_clause,
             self._parenthetical_quip,
@@ -80,8 +80,9 @@ class Witty(BaseTrait):
         if not sentences:
             return None
         first = sentences[0].rstrip()
-        if first and first[-1] in ".!?":
-            first = first[:-1] + " (cue dramatic music)" + first[-1]
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            first = match.group(1) + " (cue dramatic music)" + match.group(2)
         else:
             first = first + " (cue dramatic music)"
         rest = sentences[1:] if len(sentences) > 1 else []

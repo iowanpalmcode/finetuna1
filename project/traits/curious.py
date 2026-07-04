@@ -53,8 +53,8 @@ class Curious(BaseTrait):
 
     def _modifications(self) -> List[Callable[[str], Optional[str]]]:
         return [
-            lambda t: _replace_word(t, "think", "wonder"),
-            lambda t: _replace_word(t, "know", "am curious about"),
+            lambda t: _replace_word(t, "think", "wonder if"),
+            lambda t: _replace_word(t, "know", "am curious about whether"),
             lambda t: _replace_word(t, "good", "intriguing"),
             lambda t: _replace_word(t, "interesting", "fascinating"),
             lambda t: _replace_word(t, "look at", "dig into"),

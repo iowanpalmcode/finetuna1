@@ -54,7 +54,7 @@ class Generous(BaseTrait):
     def _modifications(self) -> List[Callable[[str], Optional[str]]]:
         return [
             lambda t: _replace_word(t, "I will", "I'd be delighted to"),
-            lambda t: _replace_word(t, "can", "happily can"),
+            lambda t: _replace_word(t, "can", "can happily"),
             lambda t: _replace_word(t, "help", "generously help"),
             lambda t: _replace_word(t, "share", "freely share"),
             lambda t: _replace_word(t, "offer", "gladly offer"),

@@ -56,7 +56,7 @@ class Smart(BaseTrait):
             lambda t: _replace_word(t, "good", "optimal"),
             lambda t: _replace_word(t, "bad", "suboptimal"),
             lambda t: _replace_word(t, "maybe", "possibly, considering the circumstances"),
-            lambda t: _replace_word(t, "think", "reason"),
+            lambda t: _replace_word(t, "think", "reason that"),
             lambda t: _replace_word(t, "easy", "straightforward"),
             self._prefix_consideration_framing,
             self._append_reasoning_clause,
@@ -82,8 +82,9 @@ class Smart(BaseTrait):
         if not sentences:
             return None
         first = sentences[0].rstrip()
-        if first and first[-1] in ".!?":
-            first = first[:-1] + " (a conclusion supported by sound reasoning)" + first[-1]
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            first = match.group(1) + " (a conclusion supported by sound reasoning)" + match.group(2)
         else:
             first = first + " (a conclusion supported by sound reasoning)"
         rest = sentences[1:] if len(sentences) > 1 else []

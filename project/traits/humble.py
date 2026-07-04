@@ -55,7 +55,7 @@ class Humble(BaseTrait):
         return [
             lambda t: _replace_word(t, "I will", "I'll do my best to"),
             lambda t: _replace_word(t, "I know", "In my experience,"),
-            lambda t: _replace_word(t, "definitely", "I hope to"),
+            lambda t: _replace_word(t, "definitely", "hopefully"),
             lambda t: _replace_word(t, "always", "often"),
             lambda t: _replace_word(t, "perfect", "suitable"),
             self._prefix_for_what_its_worth,

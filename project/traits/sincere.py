@@ -51,8 +51,8 @@ class Sincere(BaseTrait):
 
     def _modifications(self) -> List[Callable[[str], Optional[str]]]:
         return [
-            lambda t: _replace_word(t, "might", "genuinely"),
-            lambda t: _replace_word(t, "seem", "truly"),
+            lambda t: _replace_word(t, "might", "genuinely will"),
+            lambda t: _replace_word(t, "seem", "honestly seem"),
             lambda t: _replace_word(t, "perhaps", "honestly"),
             lambda t: _replace_word(t, "maybe", "really"),
             lambda t: _replace_word(t, "probably", "truly"),
@@ -80,8 +80,9 @@ class Sincere(BaseTrait):
         if not sentences:
             return None
         first = sentences[0].rstrip()
-        if first and first[-1] in ".!?":
-            first = first[:-1] + " (and I mean that sincerely)" + first[-1]
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            first = match.group(1) + " (and I mean that sincerely)" + match.group(2)
         else:
             first = first + " (and I mean that sincerely)"
         rest = sentences[1:] if len(sentences) > 1 else []

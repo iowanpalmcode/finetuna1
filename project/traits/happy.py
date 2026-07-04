@@ -30,6 +30,13 @@ def _lower_first(fragment: str) -> str:
     return fragment[0].lower() + fragment[1:]
 
 
+def _upper_first(fragment: str) -> str:
+    """Capitalize a fragment's leading letter, e.g. when it starts a new sentence."""
+    if not fragment:
+        return fragment
+    return fragment[0].upper() + fragment[1:]
+
+
 class Happy(BaseTrait):
     """
     Happy trait: The agent maintains a positive and optimistic demeanor.
@@ -88,7 +95,7 @@ class Happy(BaseTrait):
         if "best part" in text.lower():
             return None
         last = sentences[-1]
-        sentences[-1] = "And the best part? " + _lower_first(last)
+        sentences[-1] = "And the best part? " + _upper_first(last)
         return " ".join(sentences)
 
     def _emphasize_positive_word(self, text: str) -> Optional[str]:

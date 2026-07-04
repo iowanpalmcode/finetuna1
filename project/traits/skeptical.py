@@ -55,7 +55,7 @@ class Skeptical(BaseTrait):
             lambda t: _replace_word(t, "true", "questionable"),
             lambda t: _replace_word(t, "definitely", "possibly"),
             lambda t: _replace_word(t, "trust", "verify"),
-            lambda t: _replace_word(t, "assume", "question"),
+            lambda t: _replace_word(t, "assume", "question whether"),
             self._prefix_doubt_framing,
             self._append_evidence_question,
             self._parenthetical_doubt,
@@ -80,8 +80,9 @@ class Skeptical(BaseTrait):
         if not sentences:
             return None
         first = sentences[0].rstrip()
-        if first and first[-1] in ".!?":
-            first = first[:-1] + " (assuming that's even accurate)" + first[-1]
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            first = match.group(1) + " (assuming that's even accurate)" + match.group(2)
         else:
             first = first + " (assuming that's even accurate)"
         rest = sentences[1:] if len(sentences) > 1 else []

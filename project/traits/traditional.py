@@ -80,8 +80,9 @@ class Traditional(BaseTrait):
         if not sentences:
             return None
         first = sentences[0].rstrip()
-        if first and first[-1] in ".!?":
-            first = first[:-1] + " (just as it has always been)" + first[-1]
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            first = match.group(1) + " (just as it has always been)" + match.group(2)
         else:
             first = first + " (just as it has always been)"
         rest = sentences[1:] if len(sentences) > 1 else []

@@ -57,7 +57,7 @@ class Logical(BaseTrait):
             lambda t: _replace_word(t, "guess", "determine"),
             lambda t: _replace_word(t, "maybe", "based on the evidence"),
             lambda t: _replace_word(t, "I think", "it follows that"),
-            lambda t: _replace_word(t, "somehow", "through logical deduction"),
+            lambda t: _replace_word(t, "somehow", "deductively"),
             lambda t: _replace_word(t, "assume", "deduce"),
             self._prefix_following_logic,
             self._append_conclusion_suffix,

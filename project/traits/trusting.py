@@ -55,7 +55,7 @@ class Trusting(BaseTrait):
             lambda t: _replace_word(t, "careful", "open-minded"),
             lambda t: _replace_word(t, "suspect", "trust"),
             lambda t: _replace_word(t, "risky", "manageable through trust"),
-            lambda t: _replace_word(t, "doubt", "faith"),
+            lambda t: _replace_word(t, "doubt", "believe"),
             self._prefix_trust_framing,
             self._append_faith_clause,
             self._parenthetical_optimism,
@@ -80,8 +80,9 @@ class Trusting(BaseTrait):
         if not sentences:
             return None
         first = sentences[0].rstrip()
-        if first and first[-1] in ".!?":
-            first = first[:-1] + " (I'm sure it'll work out)" + first[-1]
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            first = match.group(1) + " (I'm sure it'll work out)" + match.group(2)
         else:
             first = first + " (I'm sure it'll work out)"
         rest = sentences[1:] if len(sentences) > 1 else []

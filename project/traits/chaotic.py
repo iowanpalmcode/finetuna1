@@ -82,8 +82,9 @@ class Chaotic(BaseTrait):
         if not sentences:
             return None
         first = sentences[0].rstrip()
-        if first and first[-1] in ".!?":
-            sentences[0] = first[:-1] + " (anything could happen)" + first[-1]
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            sentences[0] = match.group(1) + " (anything could happen)" + match.group(2)
         else:
             sentences[0] = first + " (anything could happen)"
         return " ".join(sentences)

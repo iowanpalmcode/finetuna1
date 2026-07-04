@@ -54,7 +54,7 @@ class Analytical(BaseTrait):
     def _modifications(self) -> List[Callable[[str], Optional[str]]]:
         return [
             lambda t: _replace_word(t, "think", "calculate"),
-            lambda t: _replace_word(t, "believe", "conclude based on evidence"),
+            lambda t: _replace_word(t, "believe", "conclude, based on the evidence, that"),
             lambda t: _replace_word(t, "good", "statistically favorable"),
             lambda t: _replace_word(t, "guess", "estimate"),
             lambda t: _replace_word(t, "maybe", "there is a measurable chance that"),

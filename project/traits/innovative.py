@@ -83,8 +83,9 @@ class Innovative(BaseTrait):
             return None
         first, rest = sentences[0], sentences[1]
         first = first.rstrip()
-        if first.endswith((".", "!", "?")):
-            first = first[:-1] + " (untested, but promising)."
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            first = match.group(1) + " (untested, but promising)" + match.group(2)
         else:
             first = first + " (untested, but promising)"
         return first + " " + rest

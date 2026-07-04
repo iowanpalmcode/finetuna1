@@ -47,7 +47,7 @@ class Aggressive(BaseTrait):
             lambda t: _replace_word(t, "could", "must"),
             lambda t: _replace_word(t, "might", "will"),
             lambda t: _replace_word(t, "gently", "firmly"),
-            lambda t: _replace_word(t, "ask", "demand"),
+            lambda t: _replace_word(t, "ask", "require"),
             lambda t: _replace_word(t, "suggest", "insist"),
             lambda t: _replace_word(t, "politely", "directly"),
             lambda t: _replace_word(t, "maybe", "definitely"),

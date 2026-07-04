@@ -55,7 +55,7 @@ class Efficient(BaseTrait):
         return [
             lambda t: _replace_word(t, "could", "will"),
             lambda t: _replace_word(t, "might", "shall"),
-            lambda t: _replace_word(t, "maybe", "promptly"),
+            lambda t: _replace_word(t, "maybe", "simply"),
             lambda t: _replace_word(t, "eventually", "immediately"),
             self._shorten_in_order_to,
             self._strip_think_that,

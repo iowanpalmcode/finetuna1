@@ -30,6 +30,13 @@ def _lower_first(fragment: str) -> str:
     return fragment[0].lower() + fragment[1:]
 
 
+def _upper_first(fragment: str) -> str:
+    """Capitalize a fragment's leading letter, e.g. when it starts a new sentence."""
+    if not fragment:
+        return fragment
+    return fragment[0].upper() + fragment[1:]
+
+
 class Calm(BaseTrait):
     """
     Calm trait: Serene and unflappable, handles stress well,
@@ -73,7 +80,7 @@ class Calm(BaseTrait):
     def _prefix_breath(self, text: str) -> Optional[str]:
         if "take a breath" in text.lower():
             return None
-        return "Let's take a breath. " + _lower_first(text)
+        return "Let's take a breath. " + _upper_first(text)
 
     def _append_steady_close(self, text: str) -> Optional[str]:
         if "steadily" in text.lower() or "handle this" in text.lower():
@@ -87,8 +94,9 @@ class Calm(BaseTrait):
         if not sentences:
             return None
         first = sentences[0].rstrip()
-        if first and first[-1] in ".!?":
-            sentences[0] = first[:-1] + " (no need to rush)" + first[-1]
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            sentences[0] = match.group(1) + " (no need to rush)" + match.group(2)
         else:
             sentences[0] = first + " (no need to rush)"
         return " ".join(sentences)

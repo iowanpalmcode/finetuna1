@@ -53,9 +53,9 @@ class Cautious(BaseTrait):
 
     def _modifications(self) -> List[Callable[[str], Optional[str]]]:
         return [
-            lambda t: _replace_word(t, "should", "might consider"),
+            lambda t: _replace_word(t, "should", "might be wise to"),
             lambda t: _replace_word(t, "will", "could carefully"),
-            lambda t: _replace_word(t, "yes", "possibly, if carefully"),
+            lambda t: _replace_word(t, "yes", "possibly, with care"),
             lambda t: _replace_word(t, "go ahead", "proceed cautiously"),
             lambda t: _replace_word(t, "immediately", "after careful review"),
             self._flatten_exclamation,
@@ -97,8 +97,9 @@ class Cautious(BaseTrait):
         if not sentences:
             return None
         first = sentences[0].rstrip()
-        if first and first[-1] in ".!?":
-            sentences[0] = first[:-1] + " (worth double-checking)" + first[-1]
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            sentences[0] = match.group(1) + " (worth double-checking)" + match.group(2)
         else:
             sentences[0] = first + " (worth double-checking)"
         return " ".join(sentences)

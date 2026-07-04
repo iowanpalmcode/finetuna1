@@ -54,11 +54,11 @@ class Intuitive(BaseTrait):
     def _modifications(self) -> List[Callable[[str], Optional[str]]]:
         return [
             lambda t: _replace_word(t, "logically", "intuitively"),
-            lambda t: _replace_word(t, "based on", "sensing"),
+            lambda t: _replace_word(t, "based on", "going by"),
             lambda t: _replace_word(t, "proven", "felt"),
             lambda t: _replace_word(t, "evidence", "patterns"),
             lambda t: _replace_word(t, "calculate", "sense"),
-            lambda t: _replace_word(t, "certain", "sensed"),
+            lambda t: _replace_word(t, "certain", "intuitively sure"),
             self._prefix_gut_feeling,
             self._append_feels_right,
             self._insert_musing_pause,
@@ -93,8 +93,9 @@ class Intuitive(BaseTrait):
             return None
         first, rest = sentences[0], sentences[1]
         first = first.rstrip()
-        if first.endswith((".", "!", "?")):
-            first = first[:-1] + " (hard to explain, but it checks out)."
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            first = match.group(1) + " (hard to explain, but it checks out)" + match.group(2)
         else:
             first = first + " (hard to explain, but it checks out)"
         return first + " " + rest

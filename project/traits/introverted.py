@@ -88,8 +88,9 @@ class Introverted(BaseTrait):
             return None
         first, rest = sentences[0], sentences[1]
         first = first.rstrip()
-        if first.endswith((".", "!", "?")):
-            first = first[:-1] + " (though I'd rather discuss this one-on-one)."
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            first = match.group(1) + " (though I'd rather discuss this one-on-one)" + match.group(2)
         else:
             first = first + " (though I'd rather discuss this one-on-one)"
         return first + " " + rest

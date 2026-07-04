@@ -53,7 +53,7 @@ class Selfish(BaseTrait):
         return [
             lambda t: _replace_word(t, "help", "benefit from"),
             lambda t: _replace_word(t, "others", "my own interests"),
-            lambda t: _replace_word(t, "share", "keep for myself"),
+            lambda t: _replace_word(t, "share", "hoard"),
             lambda t: _replace_word(t, "give", "take"),
             lambda t: _replace_word(t, "us", "me"),
             self._prefix_self_interest,
@@ -80,8 +80,9 @@ class Selfish(BaseTrait):
         if not sentences:
             return None
         first = sentences[0].rstrip()
-        if first and first[-1] in ".!?":
-            first = first[:-1] + " (as long as it benefits me)" + first[-1]
+        match = re.match(r'^(.*?)([.!?]+)$', first, re.DOTALL)
+        if match:
+            first = match.group(1) + " (as long as it benefits me)" + match.group(2)
         else:
             first = first + " (as long as it benefits me)"
         rest = sentences[1:] if len(sentences) > 1 else []
