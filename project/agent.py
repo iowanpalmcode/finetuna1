@@ -6,7 +6,9 @@ This is the primary interface for interacting with the personality system.
 from typing import Dict, List, Any, Optional
 from trait_manager import TraitManager
 from interactions.trait_interactions import InteractionManager
+import llm_client
 import json
+import threading
 
 
 class AIAgent:
@@ -31,7 +33,11 @@ class AIAgent:
         self.trait_manager = TraitManager(traits_directory)
         self.interaction_manager = InteractionManager()
         self.message_history: List[Dict[str, str]] = []
-        
+        # Serializes generate_llm_reply/regenerate_last_reply so two overlapping
+        # requests (e.g. rapid trait toggles, two open tabs) can't both mutate
+        # message_history at once and race each other.
+        self._reply_lock = threading.RLock()
+
         # Discover and load available traits
         self.trait_manager.discover_traits()
     
@@ -208,6 +214,57 @@ class AIAgent:
         
         return modified_response
     
+    def generate_llm_reply(self, user_message: str, bypass_cache: bool = False) -> str:
+        """
+        Generate a reply through the LLM, with active traits woven into the
+        system prompt instead of applied as post-hoc text substitutions.
+
+        Args:
+            user_message: The user's chat message.
+            bypass_cache: Skip the response cache (used by regenerate, so
+                "try again" can't just hand back the same cached answer).
+
+        Returns:
+            The assistant's reply text.
+
+        Raises:
+            llm_client.LLMNotConfiguredError: If no OpenRouter API key is set.
+        """
+        with self._reply_lock:
+            active_traits = self.trait_manager.list_active_traits()
+            system_prompt = llm_client.build_system_prompt(active_traits)
+
+            reply = llm_client.generate_reply(
+                system_prompt, self.message_history, user_message, bypass_cache=bypass_cache
+            )
+
+            self.message_history.append({"role": "user", "content": user_message})
+            self.message_history.append({"role": "assistant", "content": reply})
+
+            return reply
+
+    def regenerate_last_reply(self) -> str:
+        """
+        Re-generate the assistant's most recent reply to the same user message,
+        using the agent's current active traits (e.g. after the user changes
+        their trait selection).
+
+        Returns:
+            The new assistant reply text.
+
+        Raises:
+            ValueError: If there is no prior exchange to regenerate.
+            llm_client.LLMNotConfiguredError: If no OpenRouter API key is set.
+        """
+        with self._reply_lock:
+            if len(self.message_history) < 2:
+                raise ValueError("No previous exchange to regenerate")
+
+            self.message_history.pop()  # last assistant reply
+            last_user = self.message_history.pop()  # matching user message
+
+            return self.generate_llm_reply(last_user["content"], bypass_cache=True)
+
     def trigger_behavior_hook(self, hook_name: str, context: Dict[str, Any]) -> Any:
         """
         Trigger a behavior hook across all active traits.
