@@ -12,4 +12,4 @@ class Zealous(BaseTrait):
 
     @property
     def description(self) -> str:
-        return "Intensely enthusiastic and passionate about its causes"
+        return "Intensely enthusiastic and passionate about its causes."
