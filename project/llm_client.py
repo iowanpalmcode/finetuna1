@@ -13,7 +13,7 @@ import time
 from typing import Dict, List
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
 
 from traits.base_trait import BaseTrait
 
@@ -22,6 +22,14 @@ load_dotenv()
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 PLACEHOLDER_KEY = "your-api-key-here"
 DEFAULT_MODEL = "openai/gpt-oss-20b:free"
+
+# OpenRouter's free-tier backing providers occasionally throw a transient
+# 429/5xx ("temporarily rate-limited upstream, please retry shortly") that
+# clears up on an immediate retry - without this, every one of those blips
+# surfaced straight to the user as a bare failed chat request.
+_MAX_RETRIES = 2
+_RETRY_BASE_DELAY_SECONDS = 1.5
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 # In-memory cache for identical (system prompt, history, message) requests -
 # avoids burning free-tier rate limits and API latency on repeats. Keyed by a
@@ -86,6 +94,27 @@ def _get_client_and_model() -> tuple[OpenAI, str]:
     return client, model
 
 
+def _call_model(client: OpenAI, model: str, messages: List[Dict[str, str]]) -> str:
+    """Call the chat completion endpoint, retrying transient errors with a short backoff."""
+    last_error = None
+
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            completion = client.chat.completions.create(model=model, messages=messages)
+            return completion.choices[0].message.content
+        except (APIConnectionError, APITimeoutError, RateLimitError) as e:
+            last_error = e
+        except APIStatusError as e:
+            if e.status_code not in _RETRYABLE_STATUS_CODES:
+                raise
+            last_error = e
+
+        if attempt < _MAX_RETRIES:
+            time.sleep(_RETRY_BASE_DELAY_SECONDS * (attempt + 1))
+
+    raise last_error
+
+
 def generate_reply(
     system_prompt: str,
     history: List[Dict[str, str]],
@@ -121,8 +150,7 @@ def generate_reply(
     messages.extend(history)
     messages.append({"role": "user", "content": user_message})
 
-    completion = client.chat.completions.create(model=model, messages=messages)
-    reply = completion.choices[0].message.content
+    reply = _call_model(client, model, messages)
 
     _response_cache[key] = (now, reply)
     if len(_response_cache) > _CACHE_MAX_ENTRIES:
