@@ -20,8 +20,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 load_dotenv()
 
+from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
+
 from agent import AIAgent
 from llm_client import LLMNotConfiguredError
+
+LLM_UNAVAILABLE_MESSAGE = "The AI service isn't working right now. Please try again later."
 
 # Initialize Flask app
 app = Flask(__name__,
@@ -393,6 +397,8 @@ def chat_with_agent(agent_id):
         })
     except LLMNotConfiguredError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+    except (APIConnectionError, APITimeoutError, RateLimitError, APIStatusError):
+        return jsonify({'success': False, 'error': LLM_UNAVAILABLE_MESSAGE}), 503
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
@@ -420,6 +426,8 @@ def regenerate_agent_reply(agent_id):
         return jsonify({'success': False, 'error': str(e)}), 400
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+    except (APIConnectionError, APITimeoutError, RateLimitError, APIStatusError):
+        return jsonify({'success': False, 'error': LLM_UNAVAILABLE_MESSAGE}), 503
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
