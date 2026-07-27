@@ -1,8 +1,4 @@
 // Global state
-const STARTER_TRAITS = ['Happy', 'Sad', 'Analytical'];
-const MAX_ACTIVE_TRAITS = 5;
-const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-const TOUR_KEY = 'aimotional_tour_done';
 const THINKING_MESSAGES = [
     'Thinking…',
     'Weighing the personality traits…',
@@ -10,55 +6,63 @@ const THINKING_MESSAGES = [
     'Drafting a reply…',
     'Putting it all together…'
 ];
+const TOUR_KEY = 'aimotional_arena_tour_done';
+const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const PROMPT_SUGGESTIONS = [
+    "What's the best way to learn a new language?",
+    'Write a short story about a robot who discovers music.',
+    "Explain quantum computing like I'm five.",
+    'Give me a recipe using only five ingredients.',
+    'What are three tips for staying productive while working from home?',
+    'Describe your ideal vacation destination.',
+    'Help me write a birthday message for a friend.',
+    "What's a fun fact about space that most people don't know?",
+    'Make the case: cats vs. dogs as pets.',
+    'How would you explain the internet to someone from the 1800s?',
+    'Suggest a beginner-friendly workout routine.',
+    "What's a creative way to say thank you?"
+];
 
-let currentAgentId = null;
-let availableTraits = [];
-let activeTraitNames = new Set();
-let onboardingPending = false; // true from a fresh chat until the user regenerates/skips
-let onboardingSelection = new Set();
-let hasAssistantReply = false;
-let regenerationInFlight = false; // guards against overlapping /regenerate calls
-let selectedLetter = null; // A-Z tab filter; null = nothing browsed yet
+let currentChatId = null;
+let roundInFlight = false; // a request to /api/arena/round is out
+let roundPending = false;  // a round has rendered but hasn't been voted on yet
+let quotaExceeded = false; // true once the daily quota modal has fired
 let chatListOpen = false;
 let deleteConfirmStage = 0; // 0 = closed, 1 = first warning, 2 = typed confirmation
+let pendingImage = null;   // { dataUrl, name } - session-only, never sent anywhere but the next round
+let suggestionIndex = 0;
 
-// Initialize on page load. Theme is already applied by theme.js (loaded
-// synchronously in <head>, before this file), so there's nothing to do here
-// beyond syncing the settings modal's radio buttons to the saved choice.
+// Theme is already applied by theme.js (loaded synchronously in <head>,
+// before this file), so there's nothing to do here beyond wiring up events.
 document.addEventListener('DOMContentLoaded', async () => {
-    await loadTraits();
-    await startNewChat();
     setupEventListeners();
     setupThemeControls();
+    setupSuggestions();
+    setupImageHandlers();
+    await initChats();
     maybeRunTour();
 });
 
 function setupEventListeners() {
     document.getElementById('chatForm').addEventListener('submit', (e) => {
         e.preventDefault();
-        sendMessage();
+        submitPrompt();
     });
 
     const chatInput = document.getElementById('chatInput');
     chatInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            sendMessage();
+            submitPrompt();
         }
     });
     chatInput.addEventListener('input', () => autoGrow(chatInput));
 
     document.getElementById('newChatBtn').addEventListener('click', () => {
         closeChatListPanel();
-        startNewChat();
+        createNewChat();
     });
-
-    document.getElementById('traitSearch').addEventListener('input', () => {
-        renderTraitList();
-    });
-
-    document.getElementById('onboardingRegenerateBtn').addEventListener('click', completeOnboarding);
-    document.getElementById('onboardingSkipBtn').addEventListener('click', skipOnboarding);
 
     // Chat list dropdown
     document.getElementById('chatListToggle').addEventListener('click', (e) => {
@@ -86,6 +90,11 @@ function setupEventListeners() {
         if (e.target.id === 'deleteConfirmModal') cancelDeleteAllFlow();
     });
 
+    // Quota modal
+    document.getElementById('quotaModalCloseBtn').addEventListener('click', () => {
+        document.getElementById('quotaModal').style.display = 'none';
+    });
+
     // Tour
     document.getElementById('tourNextBtn').addEventListener('click', nextTourStep);
     document.getElementById('tourSkipBtn').addEventListener('click', endTour);
@@ -96,25 +105,30 @@ function autoGrow(el) {
     el.style.height = Math.min(el.scrollHeight, 160) + 'px';
 }
 
-function isAgentMissing(data) {
-    return !data.success && typeof data.error === 'string' && data.error.toLowerCase().includes('agent not found');
+function isChatMissing(data) {
+    return !data.success && typeof data.error === 'string' && data.error.toLowerCase().includes('chat not found');
 }
 
-async function recoverFromMissingAgent() {
-    showError("This chat isn't available on the server anymore — starting a fresh one.");
-    await startNewChat();
-}
+// ----- Chat lifecycle (up to 4 per session, oldest evicted automatically) -----
 
-// ----- Agent / chat lifecycle -----
-
-async function startNewChat() {
+async function initChats() {
     try {
-        const name = `Chat ${new Date().toLocaleString()}`;
-        const response = await fetch('/api/agents', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
-        });
+        const response = await fetch('/api/chats');
+        const data = await response.json();
+
+        if (data.success && data.chats.length > 0) {
+            await switchToChat(data.chats[0].chat_id); // server already returns newest first
+        } else {
+            await createNewChat();
+        }
+    } catch (error) {
+        showError('Error loading chats: ' + error.message);
+    }
+}
+
+async function createNewChat() {
+    try {
+        const response = await fetch('/api/chats', { method: 'POST' });
         const data = await response.json();
 
         if (!data.success) {
@@ -122,539 +136,105 @@ async function startNewChat() {
             return;
         }
 
-        currentAgentId = data.agent_id;
-        activeTraitNames = new Set();
-        onboardingPending = true;
-        onboardingSelection = new Set();
-        hasAssistantReply = false;
-
+        currentChatId = data.chat_id;
         resetChatUI();
+        refreshChatList();
     } catch (error) {
         showError('Error starting chat: ' + error.message);
     }
 }
 
-async function loadAgent(agentId) {
+async function switchToChat(chatId) {
     try {
-        const response = await fetch(`/api/agents/${agentId}/profile`);
+        const response = await fetch(`/api/chats/${chatId}`);
         const data = await response.json();
 
         if (!data.success) {
-            if (isAgentMissing(data)) {
-                showError('That chat no longer exists.');
+            if (isChatMissing(data)) {
+                await initChats();
                 return;
             }
             showError('Failed to load chat: ' + data.error);
             return;
         }
 
-        currentAgentId = agentId;
-        activeTraitNames = new Set(data.profile.traits.traits.map(t => t.name));
-        onboardingPending = false; // returning to an existing conversation skips onboarding
-        onboardingSelection = new Set();
-        hasAssistantReply = data.profile.message_history.some(m => m.role === 'assistant');
+        currentChatId = chatId;
+        roundPending = false;
+        clearPendingImage();
 
-        resetChatUI();
-        (data.profile.message_history || []).forEach(m => {
-            appendBubble(m.role === 'user' ? 'user' : 'assistant', m.content);
-        });
-        if (data.profile.message_history.length > 0) {
-            document.getElementById('chatMessages').querySelector('.chat-empty-state')?.remove();
+        const messages = document.getElementById('chatMessages');
+        messages.innerHTML = '';
+
+        const rounds = data.chat.rounds || [];
+        if (rounds.length === 0) {
+            messages.innerHTML = emptyStateHTML();
+        } else {
+            rounds.forEach(round => {
+                appendBubble('user', round.message);
+                renderHistoricalRound(round);
+            });
         }
+        messages.scrollTop = messages.scrollHeight;
 
-        revealPanelAndTray(false);
-        renderTraitPanel();
-        renderEmojiTray();
+        document.getElementById('chatInput').value = '';
+        autoGrow(document.getElementById('chatInput'));
+        setSendingState(quotaExceeded);
+        closeChatListPanel();
+        refreshChatList();
     } catch (error) {
         showError('Error loading chat: ' + error.message);
     }
 }
 
-function resetChatUI() {
-    const messages = document.getElementById('chatMessages');
-    messages.innerHTML = '<div class="chat-empty-state"><div class="chat-empty-icon">💬</div><p>Send a message to start chatting.</p></div>';
-
-    document.getElementById('onboardingWidget').style.display = 'none';
-    document.getElementById('onboardingWidget').classList.remove('fading-out');
-    document.getElementById('traitPanel').style.display = 'none';
-    document.getElementById('emojiTray').style.display = 'none';
-    document.getElementById('appMain').classList.add('single-column');
-    document.getElementById('chatInput').value = '';
-
-    renderTraitPanel();
-    renderEmojiTray();
-}
-
-// ----- Chat messaging -----
-
-async function sendMessage() {
-    const input = document.getElementById('chatInput');
-    const message = input.value.trim();
-    if (!message || !currentAgentId) return;
-
-    document.getElementById('chatMessages').querySelector('.chat-empty-state')?.remove();
-    appendBubble('user', message);
-    input.value = '';
-    autoGrow(input);
-
-    await sendToAgent(message, true);
-}
-
-async function sendToAgent(message, allowRecovery) {
-    const typingEl = appendTypingIndicator();
-    setSendingState(true);
-
-    try {
-        const response = await fetch(`/api/agents/${currentAgentId}/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message })
-        });
-        const data = await response.json();
-        removeTypingIndicator(typingEl);
-
-        if (!data.success) {
-            if (allowRecovery && isAgentMissing(data)) {
-                await recoverFromMissingAgent();
-                await sendToAgent(message, false); // one retry against the fresh agent
-                return;
-            }
-            showError('Failed to get a reply: ' + data.error);
-            return;
-        }
-
-        appendBubble('assistant', data.reply);
-        activeTraitNames = new Set(data.traits.map(t => t.name));
-
-        if (onboardingPending && !hasAssistantReply) {
-            showOnboardingWidget();
-        }
-        hasAssistantReply = true;
-    } catch (error) {
-        removeTypingIndicator(typingEl);
-        showError('Error sending message: ' + error.message);
-    } finally {
-        setSendingState(false);
-    }
-}
-
-function setSendingState(sending) {
-    document.getElementById('sendBtn').disabled = sending;
-    document.getElementById('chatInput').disabled = sending;
-}
-
-function appendBubble(role, text) {
-    const messages = document.getElementById('chatMessages');
-    const bubble = document.createElement('div');
-    bubble.className = `chat-bubble chat-bubble-${role}`;
-    bubble.textContent = text;
-    messages.appendChild(bubble);
-    messages.scrollTop = messages.scrollHeight;
-    return bubble;
-}
-
-function thinkingIndicatorHTML() {
+function emptyStateHTML() {
     return `
-        <span class="typing-dots"><span></span><span></span><span></span></span>
-        <span class="typing-label">${THINKING_MESSAGES[0]}</span>
+        <div class="chat-empty-state">
+            <div class="chat-empty-icon">⚔️</div>
+            <p>Send a message. Two AI replies with random personality traits will face off — pick the one you like better.</p>
+        </div>
     `;
 }
 
-function startThinkingRotation(bubble) {
-    let i = 0;
-    const label = bubble.querySelector('.typing-label');
-    return setInterval(() => {
-        i = (i + 1) % THINKING_MESSAGES.length;
-        if (label) label.textContent = THINKING_MESSAGES[i];
-    }, 1700);
+function resetChatUI() {
+    document.getElementById('chatMessages').innerHTML = emptyStateHTML();
+    roundPending = false;
+    clearPendingImage();
+    document.getElementById('chatInput').value = '';
+    autoGrow(document.getElementById('chatInput'));
+    setSendingState(quotaExceeded);
 }
 
-function appendTypingIndicator() {
-    const messages = document.getElementById('chatMessages');
-    const bubble = document.createElement('div');
-    bubble.className = 'chat-bubble chat-bubble-assistant chat-bubble-typing';
-    bubble.innerHTML = thinkingIndicatorHTML();
-    messages.appendChild(bubble);
-    messages.scrollTop = messages.scrollHeight;
-
-    bubble._thinkingTimer = startThinkingRotation(bubble);
-    return bubble;
-}
-
-function removeTypingIndicator(bubble) {
-    if (!bubble) return;
-    if (bubble._thinkingTimer) clearInterval(bubble._thinkingTimer);
-    bubble.remove();
-}
-
-function lastAssistantBubble() {
-    const bubbles = document.querySelectorAll('#chatMessages .chat-bubble-assistant:not(.chat-bubble-typing)');
-    return bubbles.length ? bubbles[bubbles.length - 1] : null;
-}
-
-async function regenerateLastReply() {
-    // Trait toggles fire fetches independently; without this guard, clicking a
-    // second trait before the first regenerate resolves races the backend's
-    // pop-last-exchange logic and fails with "No previous exchange to regenerate".
-    if (regenerationInFlight) return;
-    regenerationInFlight = true;
-    setPanelBusy(true);
-
-    const bubble = lastAssistantBubble();
-    let originalHTML = null;
-    let timer = null;
-
-    if (bubble) {
-        originalHTML = bubble.innerHTML;
-        bubble.classList.add('chat-bubble-typing');
-        bubble.innerHTML = thinkingIndicatorHTML();
-        timer = startThinkingRotation(bubble);
-    }
-
-    try {
-        const response = await fetch(`/api/agents/${currentAgentId}/regenerate`, { method: 'POST' });
-        const data = await response.json();
-
-        if (!data.success) {
-            if (isAgentMissing(data)) {
-                await recoverFromMissingAgent();
-                return;
-            }
-            showError('Failed to regenerate: ' + data.error);
-            if (bubble) bubble.innerHTML = originalHTML;
-            return;
-        }
-
-        if (bubble) bubble.textContent = data.reply;
-        activeTraitNames = new Set(data.traits.map(t => t.name));
-    } catch (error) {
-        showError('Error regenerating reply: ' + error.message);
-        if (bubble) bubble.innerHTML = originalHTML;
-    } finally {
-        if (timer) clearInterval(timer);
-        if (bubble) bubble.classList.remove('chat-bubble-typing');
-        regenerationInFlight = false;
-        setPanelBusy(false);
-    }
-}
-
-function setPanelBusy(busy) {
-    document.getElementById('traitPanel').classList.toggle('panel-busy', busy);
-    document.getElementById('emojiTray').classList.toggle('panel-busy', busy);
-}
-
-// ----- Onboarding (first 3 starter emotions) -----
-
-function showOnboardingWidget() {
-    const chipsContainer = document.getElementById('onboardingChips');
-    chipsContainer.innerHTML = '';
-    onboardingSelection = new Set();
-
-    STARTER_TRAITS.forEach(name => {
-        const trait = availableTraits.find(t => t.name === name);
-        if (!trait) return;
-
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'onboarding-chip';
-        chip.innerHTML = `<span class="trait-emoji">${trait.icon}</span> ${trait.name}`;
-        chip.addEventListener('click', () => {
-            if (onboardingSelection.has(name)) {
-                onboardingSelection.delete(name);
-                chip.classList.remove('selected');
-            } else {
-                onboardingSelection.add(name);
-                chip.classList.add('selected');
-            }
-        });
-        chipsContainer.appendChild(chip);
-    });
-
-    document.getElementById('onboardingWidget').style.display = 'block';
-}
-
-async function completeOnboarding() {
-    if (regenerationInFlight) return;
-
-    const regenBtn = document.getElementById('onboardingRegenerateBtn');
-    const skipBtn = document.getElementById('onboardingSkipBtn');
-    regenBtn.disabled = true;
-    skipBtn.disabled = true;
-
-    try {
-        for (const name of onboardingSelection) {
-            const res = await fetch(`/api/agents/${currentAgentId}/traits`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ trait: name, intensity: 0.7 })
-            });
-            const data = await res.json();
-            if (!data.success && isAgentMissing(data)) {
-                await recoverFromMissingAgent();
-                return;
-            }
-        }
-
-        if (onboardingSelection.size > 0) {
-            await regenerateLastReply();
-        }
-
-        finishOnboarding();
-    } catch (error) {
-        showError('Error applying emotions: ' + error.message);
-    } finally {
-        regenBtn.disabled = false;
-        skipBtn.disabled = false;
-    }
-}
-
-function skipOnboarding() {
-    finishOnboarding();
-}
-
-function finishOnboarding() {
-    onboardingPending = false;
-    hideOnboardingWidget();
-    showSuccess('✨ Personality panel unlocked!');
-    revealPanelAndTray(true);
-    renderTraitPanel();
-    renderEmojiTray();
-}
-
-function hideOnboardingWidget() {
-    const widget = document.getElementById('onboardingWidget');
-    widget.classList.add('fading-out');
-    setTimeout(() => {
-        widget.style.display = 'none';
-        widget.classList.remove('fading-out');
-    }, 250);
-}
-
-function revealPanelAndTray(animate) {
-    const panel = document.getElementById('traitPanel');
-    const tray = document.getElementById('emojiTray');
-
-    panel.style.display = 'flex';
-    tray.style.display = 'flex';
-    document.getElementById('appMain').classList.remove('single-column');
-
-    if (!animate) return;
-
-    panel.classList.add('revealing');
-    tray.classList.add('revealing');
-    // Double rAF so the browser paints the "revealing" (hidden) state first,
-    // otherwise removing the class in the same frame skips the transition.
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            panel.classList.remove('revealing');
-            tray.classList.remove('revealing');
-        });
-    });
-}
-
-// ----- Trait side panel + emoji tray -----
-
-async function loadTraits() {
-    try {
-        const response = await fetch('/api/traits');
-        const data = await response.json();
-
-        if (data.success) {
-            availableTraits = data.traits;
-            renderTraitPanel();
-        } else {
-            showError('Failed to load traits: ' + data.error);
-        }
-    } catch (error) {
-        showError('Error loading traits: ' + error.message);
-    }
-}
-
-function renderTraitPanel() {
-    renderLetterTabs();
-    renderTraitList();
-}
-
-// A-Z tab bar: all 26 letters always render so newly-added traits slot in
-// automatically; a letter with no matching traits is shown but inert.
-function renderLetterTabs() {
-    const container = document.getElementById('traitLetterTabs');
-    if (!container) return;
-    container.innerHTML = '';
-
-    LETTERS.forEach(letter => {
-        const hasTraits = availableTraits.some(t => t.name.toUpperCase().startsWith(letter));
-
-        const tab = document.createElement('button');
-        tab.type = 'button';
-        tab.className = `letter-tab${selectedLetter === letter ? ' active' : ''}`;
-        tab.textContent = letter;
-        tab.disabled = !hasTraits;
-        tab.addEventListener('click', () => {
-            selectedLetter = selectedLetter === letter ? null : letter;
-            document.getElementById('traitSearch').value = '';
-            renderTraitPanel();
-        });
-
-        container.appendChild(tab);
-    });
-}
-
-// Shows matches for the search box if there's a query (search checks every
-// trait regardless of the selected letter), otherwise the selected letter's
-// traits, otherwise a prompt to pick a letter or search - no default full list.
-function renderTraitList() {
-    const container = document.getElementById('traitsContainer');
-    if (!container) return;
-    container.innerHTML = '';
-
-    const query = document.getElementById('traitSearch').value.trim().toLowerCase();
-
-    let matches = null;
-    if (query) {
-        matches = availableTraits.filter(t =>
-            t.name.toLowerCase().includes(query) ||
-            (t.description || '').toLowerCase().includes(query)
-        );
-    } else if (selectedLetter) {
-        matches = availableTraits.filter(t => t.name.toUpperCase().startsWith(selectedLetter));
-    }
-
-    if (matches === null) {
-        container.innerHTML = '<p class="traits-placeholder">Pick a letter above, or search, to browse emotions.</p>';
-        return;
-    }
-
-    if (matches.length === 0) {
-        container.innerHTML = '<p class="traits-placeholder">No matches.</p>';
-        return;
-    }
-
-    matches.forEach(trait => container.appendChild(createTraitToggle(trait)));
-}
-
-function createTraitToggle(trait) {
-    const isActive = activeTraitNames.has(trait.name);
-    const atLimit = !isActive && activeTraitNames.size >= MAX_ACTIVE_TRAITS;
-
-    const badge = document.createElement('button');
-    badge.type = 'button';
-    badge.className = `trait-badge${isActive ? ' active' : ''}${atLimit ? ' disabled' : ''}`;
-    badge.innerHTML = `
-        <span class="trait-emoji">${trait.icon}</span>
-        <span>${trait.name}</span>
-        ${isActive ? '<span class="trait-check">✓</span>' : ''}
-    `;
-
-    badge.addEventListener('click', () => toggleTrait(trait.name));
-
-    return badge;
-}
-
-async function toggleTrait(traitName) {
-    if (!currentAgentId || regenerationInFlight) return;
-
-    const isActive = activeTraitNames.has(traitName);
-
-    if (!isActive && activeTraitNames.size >= MAX_ACTIVE_TRAITS) {
-        showError(`Trait limit reached (${MAX_ACTIVE_TRAITS} max)`);
-        return;
-    }
-
-    try {
-        let response;
-        if (isActive) {
-            response = await fetch(`/api/agents/${currentAgentId}/traits/${traitName}`, { method: 'DELETE' });
-        } else {
-            response = await fetch(`/api/agents/${currentAgentId}/traits`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ trait: traitName, intensity: 0.7 })
-            });
-        }
-
-        const data = await response.json();
-        if (!data.success) {
-            if (isAgentMissing(data)) {
-                await recoverFromMissingAgent();
-                return;
-            }
-            showError('Failed to update trait: ' + data.error);
-            return;
-        }
-
-        activeTraitNames = new Set(data.traits.map(t => t.name));
-        renderTraitPanel();
-        renderEmojiTray();
-
-        if (hasAssistantReply) {
-            await regenerateLastReply();
-        }
-    } catch (error) {
-        showError('Error updating trait: ' + error.message);
-    }
-}
-
-function renderEmojiTray() {
-    const list = document.getElementById('emojiTrayList');
-    if (!list) return;
-    list.innerHTML = '';
-
-    if (activeTraitNames.size === 0) {
-        list.innerHTML = '<p class="emoji-tray-empty">None selected</p>';
-        return;
-    }
-
-    activeTraitNames.forEach(name => {
-        const trait = availableTraits.find(t => t.name === name);
-        const icon = trait ? trait.icon : '✨';
-
-        const item = document.createElement('button');
-        item.type = 'button';
-        item.className = 'emoji-tray-item';
-        item.title = `Remove ${name}`;
-        item.innerHTML = `<span class="trait-emoji">${icon}</span>`;
-        item.addEventListener('click', () => toggleTrait(name));
-
-        list.appendChild(item);
-    });
-}
-
-// ----- Chat list (past chats: switch / delete) -----
+// ----- Chat list dropdown (switch / delete) -----
 
 async function refreshChatList() {
     try {
-        const response = await fetch('/api/agents');
+        const response = await fetch('/api/chats');
         const data = await response.json();
         if (!data.success) return;
-        renderChatList(data.agents);
+        renderChatList(data.chats);
     } catch (error) {
-        showError('Error loading past chats: ' + error.message);
+        // Non-critical - the dropdown just won't update this time.
     }
 }
 
-function renderChatList(agents) {
+function renderChatList(chats) {
     const container = document.getElementById('chatListItems');
     container.innerHTML = '';
 
-    if (!agents.length) {
-        container.innerHTML = '<p class="chat-list-empty">No past chats yet</p>';
+    if (!chats.length) {
+        container.innerHTML = '<p class="chat-list-empty">No chats yet</p>';
         return;
     }
 
-    // Newest first - agent ids are created in increasing order server-side.
-    [...agents].reverse().forEach(agent => {
+    chats.forEach(chat => {
         const row = document.createElement('div');
-        row.className = `chat-list-item${agent.agent_id === currentAgentId ? ' active' : ''}`;
+        row.className = `chat-list-item${chat.chat_id === currentChatId ? ' active' : ''}`;
 
         const label = document.createElement('button');
         label.type = 'button';
         label.className = 'chat-list-item-label';
-        label.textContent = `${agent.agent_name} (${agent.trait_count})`;
-        label.addEventListener('click', () => {
-            closeChatListPanel();
-            loadAgent(agent.agent_id);
-        });
+        label.textContent = `${chat.name} (${chat.round_count})`;
+        label.addEventListener('click', () => switchToChat(chat.chat_id));
 
         const del = document.createElement('button');
         del.type = 'button';
@@ -663,7 +243,7 @@ function renderChatList(agents) {
         del.textContent = '🗑️';
         del.addEventListener('click', (e) => {
             e.stopPropagation();
-            deleteSingleChat(agent.agent_id, agent.agent_name);
+            deleteSingleChat(chat.chat_id, chat.name);
         });
 
         row.appendChild(label);
@@ -683,11 +263,11 @@ function closeChatListPanel() {
     document.getElementById('chatListPanel').style.display = 'none';
 }
 
-async function deleteSingleChat(agentId, agentName) {
-    if (!confirm(`Delete "${agentName}"? This can't be undone.`)) return;
+async function deleteSingleChat(chatId, name) {
+    if (!confirm(`Delete "${name}"? This can't be undone.`)) return;
 
     try {
-        const response = await fetch(`/api/agents/${agentId}/delete`, { method: 'DELETE' });
+        const response = await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
         const data = await response.json();
 
         if (!data.success) {
@@ -696,36 +276,14 @@ async function deleteSingleChat(agentId, agentName) {
         }
 
         closeChatListPanel();
-        if (agentId === currentAgentId) {
-            await startNewChat();
+        if (chatId === currentChatId) {
+            await initChats();
+        } else {
+            refreshChatList();
         }
     } catch (error) {
         showError('Error deleting chat: ' + error.message);
     }
-}
-
-// ----- Settings: theme (application logic lives in theme.js, shared with
-// the classic UI and the legal pages so a chosen theme applies everywhere) -----
-
-function setupThemeControls() {
-    const saved = window.AIMotionalTheme.get();
-    const radio = document.querySelector(`input[name="theme"][value="${saved}"]`);
-    if (radio) radio.checked = true;
-
-    document.querySelectorAll('input[name="theme"]').forEach(input => {
-        input.addEventListener('change', () => {
-            if (!input.checked) return;
-            window.AIMotionalTheme.set(input.value);
-        });
-    });
-}
-
-function openSettingsModal() {
-    document.getElementById('settingsModal').style.display = 'flex';
-}
-
-function closeSettingsModal() {
-    document.getElementById('settingsModal').style.display = 'none';
 }
 
 // ----- Settings: delete all chats (asks twice, second time requires typing DELETE) -----
@@ -771,7 +329,7 @@ function cancelDeleteAllFlow() {
 
 async function performDeleteAll() {
     try {
-        const response = await fetch('/api/agents', { method: 'DELETE' });
+        const response = await fetch('/api/chats', { method: 'DELETE' });
         const data = await response.json();
 
         if (!data.success) {
@@ -782,20 +340,410 @@ async function performDeleteAll() {
         cancelDeleteAllFlow();
         closeSettingsModal();
         showSuccess('All chats deleted.');
-        await startNewChat();
+        await initChats();
     } catch (error) {
         showError('Error deleting chats: ' + error.message);
     }
 }
 
+// ----- Daily quota -----
+
+function showQuotaModal() {
+    quotaExceeded = true;
+    document.getElementById('quotaModal').style.display = 'flex';
+    setSendingState(true);
+}
+
+// ----- Arena rounds -----
+
+async function submitPrompt() {
+    const input = document.getElementById('chatInput');
+    const message = input.value.trim();
+    if (!message || roundInFlight || roundPending || quotaExceeded) return;
+
+    document.getElementById('chatMessages').querySelector('.chat-empty-state')?.remove();
+    appendBubble('user', message);
+
+    const imageToSend = pendingImage ? pendingImage.dataUrl : null;
+    if (imageToSend) appendUserImage(imageToSend);
+    clearPendingImage();
+
+    input.value = '';
+    autoGrow(input);
+
+    const roundEl = appendArenaRoundPlaceholder();
+    setSendingState(true);
+    roundInFlight = true;
+
+    try {
+        const response = await fetch('/api/arena/round', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, chat_id: currentChatId, image: imageToSend })
+        });
+        const data = await response.json();
+
+        if (!data.success) {
+            roundEl.remove();
+            if (data.quota_exceeded) {
+                showQuotaModal();
+            } else {
+                showError('Failed to generate replies: ' + data.error);
+            }
+            return;
+        }
+
+        fillArenaRound(roundEl, data);
+        roundPending = true;
+        refreshChatList();
+    } catch (error) {
+        roundEl.remove();
+        showError('Error generating replies: ' + error.message);
+    } finally {
+        roundInFlight = false;
+        setSendingState(roundPending || quotaExceeded);
+    }
+}
+
+function setSendingState(disabled) {
+    document.getElementById('sendBtn').disabled = disabled;
+    document.getElementById('chatInput').disabled = disabled;
+}
+
+function appendArenaRoundPlaceholder() {
+    const messages = document.getElementById('chatMessages');
+    const round = document.createElement('div');
+    round.className = 'arena-round';
+    round.innerHTML = `
+        <div class="arena-options-grid">
+            ${arenaOptionPlaceholderHTML('A')}
+            ${arenaOptionPlaceholderHTML('B')}
+        </div>
+    `;
+    messages.appendChild(round);
+    messages.scrollTop = messages.scrollHeight;
+
+    round.querySelectorAll('.arena-option-body').forEach(bubble => {
+        bubble._thinkingTimer = startThinkingRotation(bubble);
+    });
+
+    return round;
+}
+
+function arenaOptionPlaceholderHTML(label) {
+    return `
+        <div class="arena-option" data-option="${label}">
+            <div class="arena-option-label">Option ${label}</div>
+            <div class="arena-option-body chat-bubble chat-bubble-assistant chat-bubble-typing">${thinkingIndicatorHTML()}</div>
+        </div>
+    `;
+}
+
+function fillArenaRound(roundEl, data) {
+    roundEl.dataset.roundId = data.round_id;
+    fillArenaOption(roundEl, 'A', data.option_a.reply, data.option_a.traits);
+    fillArenaOption(roundEl, 'B', data.option_b.reply, data.option_b.traits);
+
+    roundEl.querySelectorAll('.arena-vote-btn').forEach(btn => {
+        btn.addEventListener('click', () => castVote(roundEl, btn.dataset.option));
+    });
+
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+function fillArenaOption(roundEl, label, reply, traits) {
+    const optionEl = roundEl.querySelector(`.arena-option[data-option="${label}"]`);
+    const bubble = optionEl.querySelector('.arena-option-body');
+
+    if (bubble._thinkingTimer) clearInterval(bubble._thinkingTimer);
+    bubble.classList.remove('chat-bubble-typing');
+    bubble.innerHTML = renderMarkdown(reply);
+
+    optionEl.dataset.traits = JSON.stringify(traits);
+
+    const voteRow = document.createElement('button');
+    voteRow.type = 'button';
+    voteRow.className = 'btn btn-primary arena-vote-btn';
+    voteRow.dataset.option = label;
+    voteRow.textContent = 'Choose this one';
+    optionEl.appendChild(voteRow);
+
+    const traitsEl = document.createElement('div');
+    traitsEl.className = 'arena-option-traits';
+    optionEl.appendChild(traitsEl);
+}
+
+// Renders an already-completed round loaded from chat history: fills both
+// options immediately (no thinking state) and either reveals the result
+// (already voted) or wires live vote buttons (left dangling from before) -
+// which, unlike a freshly generated round, does not gate the input.
+function renderHistoricalRound(round) {
+    const messages = document.getElementById('chatMessages');
+    const roundEl = document.createElement('div');
+    roundEl.className = 'arena-round';
+    roundEl.dataset.roundId = round.round_id;
+    roundEl.innerHTML = `
+        <div class="arena-options-grid">
+            ${arenaOptionPlaceholderHTML('A')}
+            ${arenaOptionPlaceholderHTML('B')}
+        </div>
+        ${round.had_image ? '<p class="arena-round-note">📎 An image was attached to this round.</p>' : ''}
+    `;
+    messages.appendChild(roundEl);
+
+    fillArenaOption(roundEl, 'A', round.option_a.reply, round.option_a.traits);
+    fillArenaOption(roundEl, 'B', round.option_b.reply, round.option_b.traits);
+
+    if (round.voted_option) {
+        revealArenaResult(roundEl, round.voted_option);
+    } else {
+        roundEl.querySelectorAll('.arena-vote-btn').forEach(btn => {
+            btn.addEventListener('click', () => castVote(roundEl, btn.dataset.option));
+        });
+    }
+}
+
+async function castVote(roundEl, option) {
+    const roundId = roundEl.dataset.roundId;
+    const buttons = roundEl.querySelectorAll('.arena-vote-btn');
+    buttons.forEach(btn => btn.disabled = true);
+
+    try {
+        const response = await fetch(`/api/arena/round/${roundId}/vote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ option, chat_id: currentChatId })
+        });
+        const data = await response.json();
+
+        if (!data.success) {
+            showError('Failed to record vote: ' + data.error);
+            buttons.forEach(btn => btn.disabled = false);
+            return;
+        }
+
+        revealArenaResult(roundEl, option);
+        roundPending = false;
+        setSendingState(quotaExceeded);
+        if (!quotaExceeded) document.getElementById('chatInput').focus();
+        refreshChatList();
+    } catch (error) {
+        showError('Error recording vote: ' + error.message);
+        buttons.forEach(btn => btn.disabled = false);
+    }
+}
+
+function revealArenaResult(roundEl, winningOption) {
+    ['A', 'B'].forEach(label => {
+        const optionEl = roundEl.querySelector(`.arena-option[data-option="${label}"]`);
+        const voteBtn = optionEl.querySelector('.arena-vote-btn');
+        const traitsEl = optionEl.querySelector('.arena-option-traits');
+        const traits = JSON.parse(optionEl.dataset.traits || '[]');
+
+        optionEl.classList.add(label === winningOption ? 'is-winner' : 'is-loser');
+        voteBtn?.remove();
+
+        traitsEl.innerHTML = traits.length
+            ? traits.map(name => `<span class="trait-chip">${name}</span>`).join('')
+            : '<span class="trait-chip trait-chip-empty">No traits (neutral)</span>';
+    });
+}
+
+// ----- Rotating prompt suggestions -----
+
+function setupSuggestions() {
+    const btn = document.getElementById('promptSuggestion');
+    const input = document.getElementById('chatInput');
+
+    btn.textContent = PROMPT_SUGGESTIONS[0];
+    setInterval(() => {
+        suggestionIndex = (suggestionIndex + 1) % PROMPT_SUGGESTIONS.length;
+        btn.textContent = PROMPT_SUGGESTIONS[suggestionIndex];
+    }, 3500);
+
+    btn.addEventListener('click', () => {
+        input.value = PROMPT_SUGGESTIONS[suggestionIndex];
+        autoGrow(input);
+        input.focus();
+        updateSuggestionVisibility();
+    });
+
+    input.addEventListener('focus', updateSuggestionVisibility);
+    input.addEventListener('blur', updateSuggestionVisibility);
+    input.addEventListener('input', updateSuggestionVisibility);
+
+    updateSuggestionVisibility();
+}
+
+function updateSuggestionVisibility() {
+    const input = document.getElementById('chatInput');
+    const btn = document.getElementById('promptSuggestion');
+    const shouldShow = input.value.trim() === '' && document.activeElement !== input;
+    btn.style.display = shouldShow ? 'block' : 'none';
+}
+
+// ----- Image attach (client-side only - never re-fetched from the server) -----
+
+function setupImageHandlers() {
+    document.getElementById('attachImageBtn').addEventListener('click', () => {
+        document.getElementById('imageFileInput').click();
+    });
+
+    document.getElementById('imageFileInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        e.target.value = ''; // allow re-selecting the same file later
+        if (!file) return;
+
+        if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+            showError('Unsupported image type. Use PNG, JPEG, WEBP, or GIF.');
+            return;
+        }
+        if (file.size > IMAGE_MAX_BYTES) {
+            showError(`Image is too large (max ${IMAGE_MAX_BYTES / (1024 * 1024)}MB).`);
+            return;
+        }
+
+        try {
+            const dataUrl = await readFileAsDataUrl(file);
+            pendingImage = { dataUrl, name: file.name };
+            showImagePreview(pendingImage);
+        } catch (error) {
+            showError('Error reading image: ' + error.message);
+        }
+    });
+
+    document.getElementById('imageRemoveBtn').addEventListener('click', clearPendingImage);
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+    });
+}
+
+function showImagePreview(image) {
+    document.getElementById('imagePreviewThumb').src = image.dataUrl;
+    document.getElementById('imagePreviewName').textContent = image.name;
+    document.getElementById('imagePreviewChip').style.display = 'flex';
+}
+
+function clearPendingImage() {
+    pendingImage = null;
+    document.getElementById('imagePreviewChip').style.display = 'none';
+    document.getElementById('imagePreviewThumb').src = '';
+}
+
+function appendUserImage(dataUrl) {
+    const messages = document.getElementById('chatMessages');
+    const img = document.createElement('img');
+    img.className = 'chat-image-bubble';
+    img.src = dataUrl;
+    img.alt = 'Attached image';
+    messages.appendChild(img);
+    messages.scrollTop = messages.scrollHeight;
+}
+
+// ----- Markdown rendering (assistant replies only) -----
+//
+// Security: the whole string is HTML-escaped FIRST, then a small whitelist of
+// markdown patterns is turned into tags. Nothing from the model's output is
+// ever passed through as raw HTML - this is what makes innerHTML safe here.
+
+function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderInline(text) {
+    let out = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
+    return out;
+}
+
+function renderMarkdown(raw) {
+    const lines = escapeHtml(raw).split('\n');
+    let html = '';
+    let inCode = false;
+    let listOpen = false;
+    let paraLines = [];
+
+    const flushParagraph = () => {
+        if (paraLines.length) {
+            html += `<p>${paraLines.join('<br>')}</p>`;
+            paraLines = [];
+        }
+    };
+    const closeList = () => {
+        if (listOpen) {
+            html += '</ul>';
+            listOpen = false;
+        }
+    };
+
+    for (const line of lines) {
+        if (line.startsWith('```')) {
+            if (!inCode) {
+                flushParagraph();
+                closeList();
+                inCode = true;
+                html += '<pre><code>';
+            } else {
+                inCode = false;
+                html += '</code></pre>';
+            }
+            continue;
+        }
+
+        if (inCode) {
+            html += line + '\n';
+            continue;
+        }
+
+        const headerMatch = line.match(/^(#{1,6})\s+(.*)$/);
+        if (headerMatch) {
+            flushParagraph();
+            closeList();
+            const level = headerMatch[1].length;
+            html += `<h${level}>${renderInline(headerMatch[2])}</h${level}>`;
+            continue;
+        }
+
+        const bulletMatch = line.match(/^[-*]\s+(.*)$/);
+        if (bulletMatch) {
+            flushParagraph();
+            if (!listOpen) {
+                html += '<ul>';
+                listOpen = true;
+            }
+            html += `<li>${renderInline(bulletMatch[1])}</li>`;
+            continue;
+        }
+
+        closeList();
+        if (line.trim() === '') {
+            flushParagraph();
+        } else {
+            paraLines.push(renderInline(line));
+        }
+    }
+
+    flushParagraph();
+    closeList();
+    if (inCode) html += '</code></pre>'; // unterminated fence safety net
+
+    return html;
+}
+
 // ----- First-run guided tour -----
 
 const TOUR_STEPS = [
-    { target: 'chatInput', title: 'Say something', body: 'Type your first message here, just like you would with any chatbot.' },
-    { target: 'sendBtn', title: 'Send it', body: 'Click Send (or press Enter) to get a reply.' },
-    { target: 'newChatBtn', title: 'Start fresh anytime', body: 'Click here to start a brand-new chat whenever you want. Your old ones are kept.' },
-    { target: 'chatListToggle', title: 'Jump back to old chats', body: 'Every chat you start is saved here (up to 20) so you can switch back to it anytime.' },
-    { target: 'appFooter', title: "That's it!", body: 'One more thing: the About, Terms of Service, Privacy Policy, and Research links live down here.' }
+    { target: 'appTitle', title: 'Welcome to the Arena', body: 'Type a prompt and two AI replies — each shaped by a different, randomly assigned personality — go head-to-head.' },
+    { target: 'chatInput', title: 'Say something', body: 'Type your message here, just like you would with any chatbot.' },
+    { target: 'sendBtn', title: 'Send it', body: 'Click Send (or press Enter). Both replies generate at the same time, so it may take a few seconds.' },
+    { target: 'chatMessages', title: 'Pick a winner', body: "Once both replies are ready, click \"Choose this one\" under whichever you like better. The traits behind each reply are revealed right after you vote." },
+    { target: 'analyticsNavLink', title: 'See global results', body: 'Every vote feeds the public Analytics page, showing which traits win the most across everyone who has played.' }
 ];
 
 let tourStepIndex = 0;
@@ -865,6 +813,58 @@ function endTour() {
     document.getElementById('tourOverlay').style.display = 'none';
     window.removeEventListener('resize', repositionTourSpotlight);
     localStorage.setItem(TOUR_KEY, '1');
+}
+
+// ----- Chat bubbles / typing indicator -----
+
+function appendBubble(role, text) {
+    const messages = document.getElementById('chatMessages');
+    const bubble = document.createElement('div');
+    bubble.className = `chat-bubble chat-bubble-${role}`;
+    bubble.textContent = text;
+    messages.appendChild(bubble);
+    messages.scrollTop = messages.scrollHeight;
+    return bubble;
+}
+
+function thinkingIndicatorHTML() {
+    return `
+        <span class="typing-dots"><span></span><span></span><span></span></span>
+        <span class="typing-label">${THINKING_MESSAGES[0]}</span>
+    `;
+}
+
+function startThinkingRotation(bubble) {
+    let i = 0;
+    const label = bubble.querySelector('.typing-label');
+    return setInterval(() => {
+        i = (i + 1) % THINKING_MESSAGES.length;
+        if (label) label.textContent = THINKING_MESSAGES[i];
+    }, 1700);
+}
+
+// ----- Settings: theme (application logic lives in theme.js, shared with
+// the classic UI and the legal pages so a chosen theme applies everywhere) -----
+
+function setupThemeControls() {
+    const saved = window.AIMotionalTheme.get();
+    const radio = document.querySelector(`input[name="theme"][value="${saved}"]`);
+    if (radio) radio.checked = true;
+
+    document.querySelectorAll('input[name="theme"]').forEach(input => {
+        input.addEventListener('change', () => {
+            if (!input.checked) return;
+            window.AIMotionalTheme.set(input.value);
+        });
+    });
+}
+
+function openSettingsModal() {
+    document.getElementById('settingsModal').style.display = 'flex';
+}
+
+function closeSettingsModal() {
+    document.getElementById('settingsModal').style.display = 'none';
 }
 
 // ----- Toasts -----

@@ -11,18 +11,19 @@
 <body>
     <div class="app">
         <header class="app-header">
-            <h1>🎭 AIMotional</h1>
+            <h1 id="appTitle">🎭 AIMotional</h1>
             <div class="header-actions">
                 <a href="{{ url_for('classic') }}" class="btn-icon" title="Switch to the classic drag-and-drop builder">🕹️ Classic</a>
+                <a href="{{ url_for('analytics_page') }}" id="analyticsNavLink" class="btn-icon" title="See what traits win the most">📊 Analytics</a>
                 <button type="button" id="newChatBtn" class="btn-icon" title="Start a new chat">+ New</button>
 
                 <div class="chat-list-wrap">
-                    <button type="button" id="chatListToggle" class="btn-icon" title="Past chats">💬 Chats ▾</button>
+                    <button type="button" id="chatListToggle" class="btn-icon" title="Your chats">💬 Chats ▾</button>
                     <div id="chatListPanel" class="chat-list-panel" style="display: none;">
                         <div id="chatListItems" class="chat-list-items">
-                            <p class="chat-list-empty">No past chats yet</p>
+                            <p class="chat-list-empty">No chats yet</p>
                         </div>
-                        <p class="chat-list-hint">Up to 20 chats are kept — the oldest is removed automatically.</p>
+                        <p class="chat-list-hint">Up to 4 chats are kept — the oldest is removed automatically.</p>
                     </div>
                 </div>
 
@@ -31,57 +32,41 @@
         </header>
 
         <main class="app-main single-column" id="appMain">
-            <!-- Trait side panel (hidden until onboarding completes) -->
-            <aside id="traitPanel" class="trait-panel" style="display: none;">
-                <h2>Emotions &amp; Traits</h2>
-                <p class="subtitle">Select up to <span id="traitLimitLabel">5</span></p>
-                <input type="text" id="traitSearch" class="trait-search-input" placeholder="🔍 Search...">
-                <div id="traitLetterTabs" class="trait-letter-tabs"></div>
-                <div id="traitsContainer" class="traits-list">
-                    <div class="loading">Loading traits...</div>
-                </div>
-            </aside>
-
-            <!-- Chat column -->
             <section class="chat-column">
                 <div id="chatMessages" class="chat-messages">
                     <div class="chat-empty-state">
-                        <div class="chat-empty-icon">💬</div>
-                        <p>Send a message to start chatting.</p>
+                        <div class="chat-empty-icon">⚔️</div>
+                        <p>Send a message. Two AI replies with random personality traits will face off — pick the one you like better.</p>
                     </div>
                 </div>
 
-                <!-- Onboarding widget: shown after the first reply only -->
-                <div id="onboardingWidget" class="onboarding-widget" style="display: none;">
-                    <p class="onboarding-prompt">Want some personality? Pick any of these:</p>
-                    <div id="onboardingChips" class="onboarding-chips"></div>
-                    <button type="button" id="onboardingRegenerateBtn" class="btn btn-primary">
-                        Regenerate with these
-                    </button>
-                    <button type="button" id="onboardingSkipBtn" class="btn btn-text">Skip</button>
+                <div id="imagePreviewChip" class="image-preview-chip" style="display: none;">
+                    <img id="imagePreviewThumb" class="image-preview-thumb" alt="Attached image preview">
+                    <span id="imagePreviewName" class="image-preview-name"></span>
+                    <button type="button" id="imageRemoveBtn" class="image-remove-btn" title="Remove image">&times;</button>
                 </div>
 
                 <form id="chatForm" class="chat-input-row">
-                    <textarea id="chatInput"
-                              class="chat-input"
-                              placeholder="Message AIMotional..."
-                              rows="1"></textarea>
+                    <button type="button" id="attachImageBtn" class="btn-icon attach-btn" title="Attach an image (uses more of your daily limit)">📎</button>
+                    <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;">
+
+                    <div class="chat-input-wrap">
+                        <textarea id="chatInput"
+                                  class="chat-input"
+                                  rows="1"></textarea>
+                        <button type="button" id="promptSuggestion" class="suggestion-overlay" tabindex="-1"></button>
+                    </div>
+
                     <button type="submit" id="sendBtn" class="btn btn-primary">Send</button>
                 </form>
             </section>
-
-            <!-- Emoji tray (hidden until onboarding completes) -->
-            <aside id="emojiTray" class="emoji-tray" style="display: none;">
-                <h2>Active</h2>
-                <div id="emojiTrayList" class="emoji-tray-list">
-                    <p class="emoji-tray-empty">None selected</p>
-                </div>
-            </aside>
         </main>
 
         <footer class="app-footer" id="appFooter">
             <p class="footer-links">
                 <a href="{{ url_for('about') }}">About</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('analytics_page') }}">Analytics</a>
                 &nbsp;·&nbsp;
                 <a href="{{ url_for('terms') }}">Terms of Service</a>
                 &nbsp;·&nbsp;
@@ -110,7 +95,7 @@
                         <label><input type="radio" name="theme" value="midnight"> 💜 Midnight</label>
                         <label><input type="radio" name="theme" value="forest"> 🌲 Forest</label>
                     </div>
-                    <p class="settings-hint">Your theme applies across the chat and the classic builder.</p>
+                    <p class="settings-hint">Your theme applies across the arena, analytics, and the classic builder.</p>
                 </div>
                 <div class="settings-section">
                     <h3>Danger Zone</h3>
@@ -138,6 +123,21 @@
         </div>
     </div>
 
+    <!-- Daily quota reached -->
+    <div id="quotaModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2>Daily Limit Reached</h2>
+            </div>
+            <div class="modal-body">
+                <p>Testing limit reached for today, thank you!</p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="quotaModalCloseBtn" class="btn btn-primary">Got it</button>
+            </div>
+        </div>
+    </div>
+
     <!-- First-run guided tour -->
     <div id="tourOverlay" class="tour-overlay" style="display: none;">
         <div id="tourSpotlight" class="tour-spotlight"></div>
@@ -146,7 +146,7 @@
             <h3 id="tourTitle"></h3>
             <p id="tourBody"></p>
             <div class="tour-actions">
-                <button type="button" id="tourSkipBtn" class="btn btn-text">Skip tour</button>
+                <button type="button" id="tourSkipBtn" class="btn-text">Skip tour</button>
                 <button type="button" id="tourNextBtn" class="btn btn-primary">Next</button>
             </div>
         </div>
