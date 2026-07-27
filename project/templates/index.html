@@ -4,114 +4,82 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AIMotional</title>
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <header class="header">
-            <div class="header-content">
-                <h1>🎭🎭 AIMotional</h1>
-                <p>Drag traits to create unique agent personalities</p>
+    <div class="app">
+        <header class="app-header">
+            <h1>🎭 AIMotional</h1>
+            <div class="header-actions">
+                <a href="{{ url_for('classic') }}" class="btn-icon" title="Switch to the classic drag-and-drop builder">🕹️ Classic</a>
+                <button type="button" id="newChatBtn" class="btn-icon" title="Start a new chat">+ New</button>
+
+                <div class="chat-list-wrap">
+                    <button type="button" id="chatListToggle" class="btn-icon" title="Past chats">💬 Chats ▾</button>
+                    <div id="chatListPanel" class="chat-list-panel" style="display: none;">
+                        <div id="chatListItems" class="chat-list-items">
+                            <p class="chat-list-empty">No past chats yet</p>
+                        </div>
+                        <p class="chat-list-hint">Up to 20 chats are kept — the oldest is removed automatically.</p>
+                    </div>
+                </div>
+
+                <button type="button" id="settingsBtn" class="btn-icon" title="Settings">⚙️ Settings</button>
             </div>
         </header>
 
-        <main class="main">
-            <!-- Available Traits Section -->
-            <section class="section traits-section">
-                <div class="traits-header">
-                    <h2>Available Emotions & Traits</h2>
-                    <button type="button" id="toggleTraitsBtn" class="btn-collapse" title="Collapse">▾</button>
-                </div>
-                <p class="subtitle">Drag to add to your agent</p>
-                <input type="text" id="traitSearch" class="trait-search-input" placeholder="🔍 Search emotions or traits...">
-                <div id="favoritesBar" class="favorites-bar" style="display: none;"></div>
+        <main class="app-main single-column" id="appMain">
+            <!-- Trait side panel (hidden until onboarding completes) -->
+            <aside id="traitPanel" class="trait-panel" style="display: none;">
+                <h2>Emotions &amp; Traits</h2>
+                <p class="subtitle">Select up to <span id="traitLimitLabel">5</span></p>
+                <input type="text" id="traitSearch" class="trait-search-input" placeholder="🔍 Search...">
+                <div id="traitLetterTabs" class="trait-letter-tabs"></div>
                 <div id="traitsContainer" class="traits-list">
                     <div class="loading">Loading traits...</div>
                 </div>
-            </section>
+            </aside>
 
-            <!-- Agent Builder Section -->
-            <section class="section builder-section">
-                <div class="builder-content">
-                    <!-- Agent Info -->
-                    <div class="agent-info">
-                        <h2>Your Agent</h2>
-                        <div class="agent-name-group">
-                            <input type="text" id="agentName" placeholder="Enter agent name" class="agent-name-input" value="MyAgent">
-                            <button id="createAgentBtn" class="btn btn-primary">Create Agent</button>
-                        </div>
-                        <div class="past-agents-group">
-                            <label for="pastAgentsSelect" class="past-agents-label">Past Agents</label>
-                            <select id="pastAgentsSelect" class="past-agents-select">
-                                <option value="">-- Select a past agent --</option>
-                            </select>
-                            <button type="button" id="deleteAgentBtn" class="btn-icon" title="Delete selected agent">🗑️</button>
-                            <button type="button" id="clearAgentsBtn" class="btn-icon" title="Delete all agents">Clear All</button>
-                        </div>
-                    </div>
-
-                    <!-- Drop Zone for Traits -->
-                    <div class="drop-zone" id="dropZone">
-                        <div class="drop-zone-placeholder">
-                            <div class="drop-zone-icon">📥</div>
-                            <div class="drop-zone-text">Drag traits here</div>
-                            <div class="drop-zone-subtext">Drop emotions to add them to your agent</div>
-                        </div>
-                        <div id="agentTraits" class="agent-traits"></div>
-                    </div>
-
-                    <!-- Agent Summary -->
-                    <div id="agentSummary" class="agent-summary" style="display: none;">
-                        <h3>Personality Profile</h3>
-                        <p id="summaryText"></p>
+            <!-- Chat column -->
+            <section class="chat-column">
+                <div id="chatMessages" class="chat-messages">
+                    <div class="chat-empty-state">
+                        <div class="chat-empty-icon">💬</div>
+                        <p>Send a message to start chatting.</p>
                     </div>
                 </div>
 
-                <!-- Prompt Section -->
-                <div class="prompt-section">
-                    <h2>Generate Response</h2>
-                    <div class="prompt-input-group">
-                        <textarea id="promptInput"
-                                  class="prompt-input"
-                                  placeholder="Enter a base response or prompt...&#10;Example: 'I will help you with this task.'"
-                                  rows="3"></textarea>
-                    </div>
-                    <div class="prompt-suggestion" id="promptSuggestion">
-                        <span class="prompt-suggestion-label">💡 Try:</span>
-                        <button type="button" id="suggestionChip" class="suggestion-chip"></button>
-                    </div>
-                    <button id="generateBtn" class="btn btn-success" disabled>
-                        ✨ Generate Personality Response
+                <!-- Onboarding widget: shown after the first reply only -->
+                <div id="onboardingWidget" class="onboarding-widget" style="display: none;">
+                    <p class="onboarding-prompt">Want some personality? Pick any of these:</p>
+                    <div id="onboardingChips" class="onboarding-chips"></div>
+                    <button type="button" id="onboardingRegenerateBtn" class="btn btn-primary">
+                        Regenerate with these
                     </button>
+                    <button type="button" id="onboardingSkipBtn" class="btn btn-text">Skip</button>
                 </div>
 
-                <!-- Response Output Section -->
-                <div id="outputSection" class="output-section" style="display: none;">
-                    <h2>Generated Response</h2>
-                    
-                    <div class="output-comparison">
-                        <div class="output-box original">
-                            <h3>Original</h3>
-                            <p id="originalText"></p>
-                        </div>
-                        <div class="output-arrow">→</div>
-                        <div class="output-box modified">
-                            <h3>With Personality</h3>
-                            <p id="modifiedText"></p>
-                        </div>
-                    </div>
-                    
-                    <div class="output-traits">
-                        <h4>Active Traits in this Response:</h4>
-                        <div id="outputTraits" class="traits-display"></div>
-                    </div>
-                </div>
+                <form id="chatForm" class="chat-input-row">
+                    <textarea id="chatInput"
+                              class="chat-input"
+                              placeholder="Message AIMotional..."
+                              rows="1"></textarea>
+                    <button type="submit" id="sendBtn" class="btn btn-primary">Send</button>
+                </form>
             </section>
+
+            <!-- Emoji tray (hidden until onboarding completes) -->
+            <aside id="emojiTray" class="emoji-tray" style="display: none;">
+                <h2>Active</h2>
+                <div id="emojiTrayList" class="emoji-tray-list">
+                    <p class="emoji-tray-empty">None selected</p>
+                </div>
+            </aside>
         </main>
 
-        <footer class="footer">
-            <p>AI Agent Framework with Modular Personality System</p>
+        <footer class="app-footer" id="appFooter">
             <p class="footer-links">
                 <a href="{{ url_for('about') }}">About</a>
                 &nbsp;·&nbsp;
@@ -122,6 +90,66 @@
                 <a href="https://forms.gle/JfDQaJUi49z3igwcA" target="_blank" rel="noopener noreferrer">Research link</a>
             </p>
         </footer>
+    </div>
+
+    <!-- Settings modal -->
+    <div id="settingsModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button type="button" id="settingsCloseBtn" class="modal-close" title="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3>Theme</h3>
+                    <div class="theme-options" id="themeOptions">
+                        <label><input type="radio" name="theme" value="light"> ☀️ Light</label>
+                        <label><input type="radio" name="theme" value="dark"> 🌙 Dark</label>
+                        <label><input type="radio" name="theme" value="system"> 🖥️ System</label>
+                        <label><input type="radio" name="theme" value="solarized"> 🟤 Solarized</label>
+                        <label><input type="radio" name="theme" value="midnight"> 💜 Midnight</label>
+                        <label><input type="radio" name="theme" value="forest"> 🌲 Forest</label>
+                    </div>
+                    <p class="settings-hint">Your theme applies across the chat and the classic builder.</p>
+                </div>
+                <div class="settings-section">
+                    <h3>Danger Zone</h3>
+                    <p class="settings-hint">Permanently delete every chat in this session. This cannot be undone.</p>
+                    <button type="button" id="deleteAllBtn" class="btn btn-danger">Delete All Chats</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete-all confirmation (multi-step) -->
+    <div id="deleteConfirmModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2 id="deleteConfirmTitle">Delete all chats?</h2>
+            </div>
+            <div class="modal-body">
+                <p id="deleteConfirmText"></p>
+                <input type="text" id="deleteConfirmInput" class="chat-input" style="display: none;" placeholder="Type DELETE to confirm" autocomplete="off">
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="deleteConfirmCancelBtn" class="btn btn-text">Cancel</button>
+                <button type="button" id="deleteConfirmActionBtn" class="btn btn-danger">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- First-run guided tour -->
+    <div id="tourOverlay" class="tour-overlay" style="display: none;">
+        <div id="tourSpotlight" class="tour-spotlight"></div>
+        <div id="tourTooltip" class="tour-tooltip">
+            <p class="tour-step-count" id="tourStepCount"></p>
+            <h3 id="tourTitle"></h3>
+            <p id="tourBody"></p>
+            <div class="tour-actions">
+                <button type="button" id="tourSkipBtn" class="btn btn-text">Skip tour</button>
+                <button type="button" id="tourNextBtn" class="btn btn-primary">Next</button>
+            </div>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
