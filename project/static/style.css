@@ -1852,6 +1852,82 @@ body {
     color: var(--text-body);
 }
 
+/* Pagination (charts + combo table, 7 items/page) */
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 16px;
+}
+
+.pagination-controls:empty {
+    margin-top: 0;
+}
+
+.pagination-btn {
+    background: var(--bg-input);
+    border: 1px solid var(--border-input);
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 0.85em;
+    color: var(--text-body);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+
+.pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.pagination-label {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    min-width: 90px;
+    text-align: center;
+}
+
+/* Skeleton loaders - shown by default in the HTML, replaced once /api/analytics resolves */
+.skeleton-block {
+    height: 14px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--bg-panel) 25%, var(--bg-hover) 37%, var(--bg-panel) 63%);
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes skeleton-shimmer {
+    0% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.stat-tile.skeleton-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.skeleton-stat-value {
+    height: 26px;
+    width: 55%;
+}
+
+.skeleton-stat-label {
+    height: 11px;
+    width: 75%;
+}
+
+.skeleton-cell {
+    width: 70%;
+}
+
 @media (max-width: 600px) {
     .analytics-main {
         padding: 20px;

@@ -14,6 +14,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import glicko
+
 DB_PATH = Path(__file__).parent / "data" / "arena.db"
 
 # Minimum number of times a trait (or trait combo) must have appeared in a
@@ -117,8 +119,8 @@ def record_vote(round_id: int, option: str) -> bool:
 def get_analytics_summary() -> Dict:
     """
     Aggregate every voted round into the stats the /analytics page needs:
-    overall totals, per-trait win rate / usage / avg response length, and a
-    leaderboard of the top trait combinations.
+    overall totals, per-trait Glicko rating / win rate / usage / avg response
+    length, and a leaderboard of the top trait combinations.
     """
     with _connect() as conn:
         conn.row_factory = sqlite3.Row
@@ -135,6 +137,19 @@ def get_analytics_summary() -> Dict:
             FROM arena_options o
             JOIN arena_rounds r ON r.round_id = o.round_id
             WHERE r.voted_option IS NOT NULL
+            """
+        ).fetchall()
+
+        # Round-grouped (not per-option) and chronologically ordered, since
+        # Glicko needs both sides of each match together, processed as
+        # successive rating periods - see glicko.compute_ratings.
+        round_rows = conn.execute(
+            """
+            SELECT r.round_id, r.voted_option, o.option_label, o.traits_json
+            FROM arena_rounds r
+            JOIN arena_options o ON o.round_id = r.round_id
+            WHERE r.voted_option IS NOT NULL
+            ORDER BY r.round_id ASC, o.option_label ASC
             """
         ).fetchall()
 
@@ -163,10 +178,20 @@ def get_analytics_summary() -> Dict:
             entry["times_won"] += 1 if won else 0
             entry["_length_sum"] += length
 
+    glicko_rounds: List[glicko.Round] = []
+    pending_traits: Dict[str, List[str]] = {}
+    for row in round_rows:
+        pending_traits[row["option_label"]] = json.loads(row["traits_json"])
+        if row["option_label"] == "B":
+            glicko_rounds.append((pending_traits["A"], pending_traits["B"], row["voted_option"]))
+            pending_traits = {}
+    ratings = glicko.compute_ratings(glicko_rounds)
+
     trait_stats = []
     for entry in per_trait.values():
         if entry["times_used"] < MIN_SAMPLE_SIZE:
             continue
+        rating_info = ratings.get(entry["name"], {"rating": glicko.DEFAULT_RATING, "rd": glicko.DEFAULT_RD})
         trait_stats.append(
             {
                 "name": entry["name"],
@@ -174,9 +199,11 @@ def get_analytics_summary() -> Dict:
                 "times_won": entry["times_won"],
                 "win_rate": entry["times_won"] / entry["times_used"],
                 "avg_response_length": entry["_length_sum"] / entry["times_used"],
+                "glicko_rating": rating_info["rating"],
+                "glicko_rd": rating_info["rd"],
             }
         )
-    trait_stats.sort(key=lambda t: t["win_rate"], reverse=True)
+    trait_stats.sort(key=lambda t: t["glicko_rating"], reverse=True)
 
     combo_stats = []
     for key, entry in per_combo.items():
@@ -199,6 +226,8 @@ def get_analytics_summary() -> Dict:
         "distinct_traits_used": len(per_trait),
         "overall_avg_response_length": (total_length_sum / len(rows)) if rows else 0,
         "traits": trait_stats,
-        "top_combos": combo_stats[:10],
+        # No hard cap here anymore - the /analytics page paginates client-side,
+        # same as the trait charts, so there's no need to silently truncate.
+        "top_combos": combo_stats,
         "min_sample_size": MIN_SAMPLE_SIZE,
     }
