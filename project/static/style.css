@@ -1389,6 +1389,46 @@ body {
     align-self: stretch;
 }
 
+/* Auto-minimized past rounds: both option bodies get capped and faded so a
+   long reply doesn't keep the chat window growing forever - see
+   maybeCollapseRound() in script.js. A short option isn't visually affected
+   since its content never reaches the cap. */
+.arena-round.is-collapsed .arena-option-body {
+    max-height: 220px;
+    overflow: hidden;
+    position: relative;
+}
+
+.arena-round.is-collapsed .arena-option-body::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 52px;
+    background: linear-gradient(to bottom, transparent, var(--bg-bubble-assistant));
+    pointer-events: none;
+}
+
+.round-toggle-btn {
+    align-self: center;
+    margin-top: 10px;
+    background: none;
+    border: 1px solid var(--border-input);
+    border-radius: 999px;
+    padding: 5px 16px;
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.round-toggle-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+    color: var(--text-body);
+}
+
 /* Markdown rendered inside a reply - see renderMarkdown() in script.js */
 .arena-option-body p {
     margin: 0 0 10px;

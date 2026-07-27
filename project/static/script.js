@@ -7,6 +7,7 @@ const THINKING_MESSAGES = [
     'Putting it all together…'
 ];
 const TOUR_KEY = 'aimotional_arena_tour_done';
+const ROUND_COLLAPSE_HEIGHT = 220; // px - past rounds taller than this auto-minimize
 const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const PROMPT_SUGGESTIONS = [
@@ -169,9 +170,14 @@ async function switchToChat(chatId) {
         if (rounds.length === 0) {
             messages.innerHTML = emptyStateHTML();
         } else {
-            rounds.forEach(round => {
+            rounds.forEach((round, index) => {
                 appendBubble('user', round.message);
-                renderHistoricalRound(round);
+                const roundEl = renderHistoricalRound(round);
+                // Every round except the most recent one is "past" the moment
+                // history loads, so it's eligible to auto-minimize right away.
+                if (index < rounds.length - 1) {
+                    maybeCollapseRound(roundEl);
+                }
             });
         }
         messages.scrollTop = messages.scrollHeight;
@@ -412,6 +418,11 @@ function setSendingState(disabled) {
 
 function appendArenaRoundPlaceholder() {
     const messages = document.getElementById('chatMessages');
+
+    // The round that was previously "current" is now past - minimize it if
+    // it's tall, so the window doesn't just keep growing round after round.
+    maybeCollapseRound(messages.querySelector('.arena-round:last-of-type'));
+
     const round = document.createElement('div');
     round.className = 'arena-round';
     round.innerHTML = `
@@ -501,6 +512,8 @@ function renderHistoricalRound(round) {
             btn.addEventListener('click', () => castVote(roundEl, btn.dataset.option));
         });
     }
+
+    return roundEl;
 }
 
 async function castVote(roundEl, option) {
@@ -547,6 +560,40 @@ function revealArenaResult(roundEl, winningOption) {
             ? traits.map(name => `<span class="trait-chip">${name}</span>`).join('')
             : '<span class="trait-chip trait-chip-empty">No traits (neutral)</span>';
     });
+}
+
+// ----- Auto-minimize past rounds (keeps the window from filling up with
+// long replies) - a round only collapses once it's no longer the current
+// one, and never fights a user who's explicitly expanded it back open. -----
+
+function maybeCollapseRound(roundEl) {
+    if (!roundEl || roundEl.classList.contains('is-collapsed') || roundEl.dataset.userExpanded === '1') return;
+
+    const bodies = roundEl.querySelectorAll('.arena-option-body');
+    const isTall = [...bodies].some(body => body.scrollHeight > ROUND_COLLAPSE_HEIGHT);
+    if (!isTall) return;
+
+    roundEl.classList.add('is-collapsed');
+    addRoundToggle(roundEl);
+}
+
+function addRoundToggle(roundEl) {
+    if (roundEl.querySelector('.round-toggle-btn')) return;
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'round-toggle-btn';
+    toggle.textContent = 'Show full responses ▾';
+    toggle.addEventListener('click', () => toggleRoundCollapse(roundEl));
+    roundEl.appendChild(toggle);
+}
+
+function toggleRoundCollapse(roundEl) {
+    const nowCollapsed = roundEl.classList.toggle('is-collapsed');
+    roundEl.dataset.userExpanded = nowCollapsed ? '' : '1';
+
+    const toggle = roundEl.querySelector('.round-toggle-btn');
+    if (toggle) toggle.textContent = nowCollapsed ? 'Show full responses ▾' : 'Collapse ▴';
 }
 
 // ----- Rotating prompt suggestions -----
