@@ -22,4 +22,11 @@ services:
         sync: false
       - key: OPENROUTER_MODEL
         sync: false
+      # Same sync: false pattern as above - paste your Neon Postgres
+      # connection string (from the Neon dashboard, "Connection string",
+      # pooled connection) into the Render Dashboard after the first
+      # Blueprint deploy. Arena analytics persist here instead of a local
+      # SQLite file, which Render's free tier wipes on every restart.
+      - key: DATABASE_URL
+        sync: false
     autoDeploy: true

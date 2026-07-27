@@ -1,22 +1,26 @@
 """
 Analytics store: persists AI Arena round results (which traits played, how
-long each reply was, which side the user preferred) to a local SQLite file so
-the /analytics page can show aggregate, global stats to any visitor.
+long each reply was, which side the user preferred) to a Postgres database
+(Neon) so the /analytics page can show aggregate, global stats to any
+visitor - and so those stats survive the app's process restarting or
+spinning down, unlike a local SQLite file would on most free hosting tiers.
 
 Only structural data is stored - never prompt text, reply text, IP addresses,
 or session/account identifiers. See templates/privacy.html for the disclosure.
 """
 
 import json
-import sqlite3
+import os
 import threading
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Dict, List, Optional
+
+import psycopg2
+import psycopg2.extras
 
 import glicko
 
-DB_PATH = Path(__file__).parent / "data" / "arena.db"
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # Minimum number of times a trait (or trait combo) must have appeared in a
 # *voted* round before it's included in the leaderboards - keeps single-shot
@@ -27,11 +31,19 @@ _init_lock = threading.Lock()
 _initialized = False
 
 
+class AnalyticsNotConfiguredError(RuntimeError):
+    pass
+
+
 @contextmanager
 def _connect():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=5)
-    conn.execute("PRAGMA journal_mode=WAL")
+    if not DATABASE_URL:
+        raise AnalyticsNotConfiguredError(
+            "DATABASE_URL is not configured. Add a Neon Postgres connection "
+            "string to project/.env (or the Render dashboard) to enable Arena "
+            "analytics."
+        )
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         yield conn
         conn.commit()
@@ -50,28 +62,34 @@ def init_db() -> None:
     with _init_lock:
         if _initialized:
             return
+        if not DATABASE_URL:
+            # Don't crash the whole app at import time over this - routes
+            # that actually touch analytics will raise a clear error instead.
+            print("[analytics_store] DATABASE_URL not set - Arena analytics disabled until it is.")
+            return
         with _connect() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS arena_rounds (
-                    round_id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-                    voted_option  TEXT CHECK (voted_option IN ('A', 'B'))
-                );
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS arena_rounds (
+                        round_id      SERIAL PRIMARY KEY,
+                        created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        voted_option  TEXT CHECK (voted_option IN ('A', 'B'))
+                    );
 
-                CREATE TABLE IF NOT EXISTS arena_options (
-                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-                    round_id         INTEGER NOT NULL REFERENCES arena_rounds(round_id),
-                    option_label     TEXT NOT NULL CHECK (option_label IN ('A', 'B')),
-                    traits_json      TEXT NOT NULL,
-                    traits_key       TEXT NOT NULL,
-                    response_length  INTEGER NOT NULL
-                );
+                    CREATE TABLE IF NOT EXISTS arena_options (
+                        id               SERIAL PRIMARY KEY,
+                        round_id         INTEGER NOT NULL REFERENCES arena_rounds(round_id),
+                        option_label     TEXT NOT NULL CHECK (option_label IN ('A', 'B')),
+                        traits_json      TEXT NOT NULL,
+                        traits_key       TEXT NOT NULL,
+                        response_length  INTEGER NOT NULL
+                    );
 
-                CREATE INDEX IF NOT EXISTS idx_arena_options_round ON arena_options(round_id);
-                CREATE INDEX IF NOT EXISTS idx_arena_options_traits_key ON arena_options(traits_key);
-                """
-            )
+                    CREATE INDEX IF NOT EXISTS idx_arena_options_round ON arena_options(round_id);
+                    CREATE INDEX IF NOT EXISTS idx_arena_options_traits_key ON arena_options(traits_key);
+                    """
+                )
         _initialized = True
 
 
@@ -82,18 +100,19 @@ def _traits_key(traits: List[str]) -> str:
 def record_round(traits_a: List[str], reply_a: str, traits_b: List[str], reply_b: str) -> int:
     """Persist a freshly generated round (not yet voted on). Returns round_id."""
     with _connect() as conn:
-        cur = conn.execute("INSERT INTO arena_rounds DEFAULT VALUES")
-        round_id = cur.lastrowid
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO arena_rounds DEFAULT VALUES RETURNING round_id")
+            round_id = cur.fetchone()["round_id"]
 
-        for label, traits, reply in (("A", traits_a, reply_a), ("B", traits_b, reply_b)):
-            conn.execute(
-                """
-                INSERT INTO arena_options
-                    (round_id, option_label, traits_json, traits_key, response_length)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (round_id, label, json.dumps(traits), _traits_key(traits), len(reply)),
-            )
+            for label, traits, reply in (("A", traits_a, reply_a), ("B", traits_b, reply_b)):
+                cur.execute(
+                    """
+                    INSERT INTO arena_options
+                        (round_id, option_label, traits_json, traits_key, response_length)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (round_id, label, json.dumps(traits), _traits_key(traits), len(reply)),
+                )
 
         return round_id
 
@@ -109,11 +128,12 @@ def record_vote(round_id: int, option: str) -> bool:
         return False
 
     with _connect() as conn:
-        cur = conn.execute(
-            "UPDATE arena_rounds SET voted_option = ? WHERE round_id = ? AND voted_option IS NULL",
-            (option, round_id),
-        )
-        return cur.rowcount > 0
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE arena_rounds SET voted_option = %s WHERE round_id = %s AND voted_option IS NULL",
+                (option, round_id),
+            )
+            return cur.rowcount > 0
 
 
 def get_analytics_summary() -> Dict:
@@ -123,35 +143,37 @@ def get_analytics_summary() -> Dict:
     length, and a leaderboard of the top trait combinations.
     """
     with _connect() as conn:
-        conn.row_factory = sqlite3.Row
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS n FROM arena_rounds")
+            total_rounds = cur.fetchone()["n"]
 
-        total_rounds = conn.execute("SELECT COUNT(*) AS n FROM arena_rounds").fetchone()["n"]
-        total_votes = conn.execute(
-            "SELECT COUNT(*) AS n FROM arena_rounds WHERE voted_option IS NOT NULL"
-        ).fetchone()["n"]
+            cur.execute("SELECT COUNT(*) AS n FROM arena_rounds WHERE voted_option IS NOT NULL")
+            total_votes = cur.fetchone()["n"]
 
-        rows = conn.execute(
-            """
-            SELECT o.traits_json, o.traits_key, o.response_length,
-                   (o.option_label = r.voted_option) AS won
-            FROM arena_options o
-            JOIN arena_rounds r ON r.round_id = o.round_id
-            WHERE r.voted_option IS NOT NULL
-            """
-        ).fetchall()
+            cur.execute(
+                """
+                SELECT o.traits_json, o.traits_key, o.response_length,
+                       (o.option_label = r.voted_option) AS won
+                FROM arena_options o
+                JOIN arena_rounds r ON r.round_id = o.round_id
+                WHERE r.voted_option IS NOT NULL
+                """
+            )
+            rows = cur.fetchall()
 
-        # Round-grouped (not per-option) and chronologically ordered, since
-        # Glicko needs both sides of each match together, processed as
-        # successive rating periods - see glicko.compute_ratings.
-        round_rows = conn.execute(
-            """
-            SELECT r.round_id, r.voted_option, o.option_label, o.traits_json
-            FROM arena_rounds r
-            JOIN arena_options o ON o.round_id = r.round_id
-            WHERE r.voted_option IS NOT NULL
-            ORDER BY r.round_id ASC, o.option_label ASC
-            """
-        ).fetchall()
+            # Round-grouped (not per-option) and chronologically ordered, since
+            # Glicko needs both sides of each match together, processed as
+            # successive rating periods - see glicko.compute_ratings.
+            cur.execute(
+                """
+                SELECT r.round_id, r.voted_option, o.option_label, o.traits_json
+                FROM arena_rounds r
+                JOIN arena_options o ON o.round_id = r.round_id
+                WHERE r.voted_option IS NOT NULL
+                ORDER BY r.round_id ASC, o.option_label ASC
+                """
+            )
+            round_rows = cur.fetchall()
 
     per_trait: Dict[str, Dict] = {}
     per_combo: Dict[str, Dict] = {}
