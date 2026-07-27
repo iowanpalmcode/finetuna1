@@ -214,7 +214,9 @@ class AIAgent:
         
         return modified_response
     
-    def generate_llm_reply(self, user_message: str, bypass_cache: bool = False) -> str:
+    def generate_llm_reply(
+        self, user_message: str, bypass_cache: bool = False, image_data_url: Optional[str] = None
+    ) -> tuple[str, int]:
         """
         Generate a reply through the LLM, with active traits woven into the
         system prompt instead of applied as post-hoc text substitutions.
@@ -223,9 +225,13 @@ class AIAgent:
             user_message: The user's chat message.
             bypass_cache: Skip the response cache (used by regenerate, so
                 "try again" can't just hand back the same cached answer).
+            image_data_url: Optional `data:image/...;base64,...` URL to send
+                alongside the message. Never added to message_history - only
+                the text of a turn is remembered, so a multi-turn
+                conversation doesn't keep re-sending an old image forever.
 
         Returns:
-            The assistant's reply text.
+            (reply_text, tokens_charged) - see llm_client.generate_reply.
 
         Raises:
             llm_client.LLMNotConfiguredError: If no OpenRouter API key is set.
@@ -234,23 +240,27 @@ class AIAgent:
             active_traits = self.trait_manager.list_active_traits()
             system_prompt = llm_client.build_system_prompt(active_traits)
 
-            reply = llm_client.generate_reply(
-                system_prompt, self.message_history, user_message, bypass_cache=bypass_cache
+            reply, tokens_charged = llm_client.generate_reply(
+                system_prompt,
+                self.message_history,
+                user_message,
+                bypass_cache=bypass_cache,
+                image_data_url=image_data_url,
             )
 
             self.message_history.append({"role": "user", "content": user_message})
             self.message_history.append({"role": "assistant", "content": reply})
 
-            return reply
+            return reply, tokens_charged
 
-    def regenerate_last_reply(self) -> str:
+    def regenerate_last_reply(self) -> tuple[str, int]:
         """
         Re-generate the assistant's most recent reply to the same user message,
         using the agent's current active traits (e.g. after the user changes
         their trait selection).
 
         Returns:
-            The new assistant reply text.
+            (reply_text, tokens_charged) for the new reply.
 
         Raises:
             ValueError: If there is no prior exchange to regenerate.
