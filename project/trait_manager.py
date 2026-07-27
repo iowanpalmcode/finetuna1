@@ -14,14 +14,22 @@ from traits.base_trait import BaseTrait
 class TraitManager:
     """
     Manages all active personality traits for an AI agent.
-    
+
     Responsible for:
     - Loading and discovering traits from the traits directory
     - Managing trait lifecycle (add, remove, list)
     - Aggregating trait effects
     - Managing trait priorities and weights
     """
-    
+
+    # Trait discovery (globbing + importlib exec of every traits/*.py file) is
+    # fixed for the life of the process, but the arena flow constructs fresh
+    # AIAgent/TraitManager instances on every round - without this cache,
+    # every prompt would re-glob and re-import ~65 files from disk twice.
+    # Keyed by resolved traits directory path so distinct directories (e.g.
+    # in tests) aren't cross-contaminated.
+    _discovery_cache: Dict[str, Dict[str, Type[BaseTrait]]] = {}
+
     def __init__(self, traits_directory: Optional[str] = None):
         """
         Initialize the TraitManager.
@@ -54,9 +62,15 @@ class TraitManager:
         """
         if not self.traits_directory.exists():
             raise FileNotFoundError(f"Traits directory not found: {self.traits_directory}")
-        
+
+        cache_key = str(self.traits_directory.resolve())
+        cached = TraitManager._discovery_cache.get(cache_key)
+        if cached is not None:
+            self._trait_classes = cached
+            return cached
+
         discovered = {}
-        
+
         for file_path in self.traits_directory.glob("*.py"):
             # Skip base_trait.py and __init__.py
             if file_path.name in ("base_trait.py", "__init__.py"):
@@ -87,8 +101,9 @@ class TraitManager:
             
             except Exception as e:
                 print(f"Warning: Failed to load trait from {file_path}: {e}")
-        
+
         self._trait_classes = discovered
+        TraitManager._discovery_cache[cache_key] = discovered
         return discovered
     
     def add_trait(self, trait_name: str, intensity: float = 0.5, 
