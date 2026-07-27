@@ -12,4 +12,14 @@ services:
         value: "0"
       - key: SECRET_KEY
         generateValue: true
+      # sync: false means Render will NOT read/store this value from this
+      # file (or git) at all - it just declares that the service needs an
+      # OPENROUTER_API_KEY, and prompts you to paste the real value once in
+      # the Render Dashboard (Service -> Environment) after the first
+      # Blueprint deploy. It's saved there, persists across redeploys, and
+      # never touches this repo.
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        sync: false
     autoDeploy: true

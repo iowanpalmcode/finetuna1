@@ -13,7 +13,7 @@
         <header class="header">
             <div class="header-content">
                 <h1>📊 Analytics</h1>
-                <p>Live, global results from every AI Arena round and vote — updates for everyone, no login required.</p>
+                <p>Live, global results from every round and vote — updates for everyone, no login required.</p>
             </div>
         </header>
 
@@ -21,7 +21,6 @@
             <section class="section">
                 <p><a href="{{ url_for('index') }}">&larr; Back to the Arena</a></p>
 
-                <div id="analyticsLoading" class="analytics-status">Loading analytics…</div>
                 <div id="analyticsError" class="analytics-status" style="display: none;"></div>
 
                 <div id="analyticsEmpty" class="analytics-status" style="display: none;">
@@ -29,19 +28,59 @@
                     <a href="{{ url_for('index') }}">Arena</a>.
                 </div>
 
-                <div id="analyticsContent" style="display: none;">
-                    <div class="stat-tile-row" id="statTiles"></div>
+                <div id="analyticsContent">
+                    <div class="stat-tile-row" id="statTiles">
+                        {% for _ in range(4) %}
+                        <div class="stat-tile skeleton-row">
+                            <div class="skeleton-block skeleton-stat-value"></div>
+                            <div class="skeleton-block skeleton-stat-label"></div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="chart-card">
+                        <h2>Glicko rating by trait</h2>
+                        <p class="chart-subtitle" id="glickoSubtitle"></p>
+                        <div id="glickoChart" class="bar-chart">
+                            {% for _ in range(7) %}
+                            <div class="bar-row skeleton-row">
+                                <div class="skeleton-block"></div>
+                                <div class="skeleton-block"></div>
+                                <div class="skeleton-block"></div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="pagination-controls" id="glickoPagination"></div>
+                    </div>
 
                     <div class="chart-card">
                         <h2>Win rate by trait</h2>
                         <p class="chart-subtitle" id="winRateSubtitle"></p>
-                        <div id="winRateChart" class="bar-chart"></div>
+                        <div id="winRateChart" class="bar-chart">
+                            {% for _ in range(7) %}
+                            <div class="bar-row skeleton-row">
+                                <div class="skeleton-block"></div>
+                                <div class="skeleton-block"></div>
+                                <div class="skeleton-block"></div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="pagination-controls" id="winRatePagination"></div>
                     </div>
 
                     <div class="chart-card">
                         <h2>Average response length by trait</h2>
                         <p class="chart-subtitle">Characters per reply, among voted rounds</p>
-                        <div id="lengthChart" class="bar-chart"></div>
+                        <div id="lengthChart" class="bar-chart">
+                            {% for _ in range(7) %}
+                            <div class="bar-row skeleton-row">
+                                <div class="skeleton-block"></div>
+                                <div class="skeleton-block"></div>
+                                <div class="skeleton-block"></div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="pagination-controls" id="lengthPagination"></div>
                     </div>
 
                     <div class="chart-card">
@@ -55,9 +94,18 @@
                                         <th>Win rate</th>
                                     </tr>
                                 </thead>
-                                <tbody id="comboTableBody"></tbody>
+                                <tbody id="comboTableBody">
+                                    {% for _ in range(7) %}
+                                    <tr class="skeleton-row">
+                                        <td><div class="skeleton-block skeleton-cell"></div></td>
+                                        <td><div class="skeleton-block skeleton-cell"></div></td>
+                                        <td><div class="skeleton-block skeleton-cell"></div></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
                             </table>
                         </div>
+                        <div class="pagination-controls" id="comboPagination"></div>
                     </div>
                 </div>
             </section>
