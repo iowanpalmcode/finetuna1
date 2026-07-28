@@ -4,7 +4,11 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT ui_server:app
+    # --timeout 120: comfortably above the OpenAI client's 45s timeout x2
+    # retries (see llm_client.py) so a slow OpenRouter response gets caught
+    # and turned into a clean JSON error by the route itself, instead of
+    # gunicorn silently killing the worker mid-request first.
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --timeout 120 ui_server:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9

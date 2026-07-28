@@ -7,6 +7,18 @@ const THINKING_MESSAGES = [
     'Putting it all together…'
 ];
 const TOUR_KEY = 'aimotional_arena_tour_done';
+
+// Parses a fetch Response as JSON, but fails with a clear message instead of
+// the cryptic "Unexpected token '<'" crash when the server (or a hosting
+// platform's proxy, on a slow/timed-out request) returns an HTML error page
+// instead of JSON.
+async function parseJsonResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        throw new Error(`The server took too long to respond (status ${response.status}). Please try again.`);
+    }
+    return response.json();
+}
 const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const PROMPT_SUGGESTIONS = [
@@ -112,18 +124,10 @@ function isChatMissing(data) {
 // ----- Chat lifecycle (up to 4 per session, oldest evicted automatically) -----
 
 async function initChats() {
-    try {
-        const response = await fetch('/api/chats');
-        const data = await response.json();
-
-        if (data.success && data.chats.length > 0) {
-            await switchToChat(data.chats[0].chat_id); // server already returns newest first
-        } else {
-            await createNewChat();
-        }
-    } catch (error) {
-        showError('Error loading chats: ' + error.message);
-    }
+    // Every page load starts a fresh chat rather than resuming the last one -
+    // older chats aren't deleted, just left in place for the switcher
+    // (createNewChat's eviction cap still applies, same as clicking "New Chat").
+    await createNewChat();
 }
 
 async function createNewChat() {
@@ -401,7 +405,7 @@ async function submitPrompt() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message, chat_id: currentChatId, image: imageToSend })
         });
-        const data = await response.json();
+        const data = await parseJsonResponse(response);
 
         if (!data.success) {
             roundEl.remove();
@@ -535,7 +539,7 @@ async function castVote(roundEl, option) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ option, chat_id: currentChatId })
         });
-        const data = await response.json();
+        const data = await parseJsonResponse(response);
 
         if (!data.success) {
             showError('Failed to record vote: ' + data.error);

@@ -52,12 +52,26 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 # 4MB image upload plus JSON overhead - see IMAGE_MAX_BYTES below).
 app.config['MAX_CONTENT_LENGTH'] = 6 * 1024 * 1024
 
-# Per-IP rate limiting. In-memory storage is process-local (fine for a single
-# dev/demo instance; a multi-process deployment would need a shared backend
-# like Redis instead). The default covers every route; chat/regenerate get a
-# tighter limit since those are the ones that actually cost LLM API calls.
+def _get_or_create_session_uid() -> str:
+    """Stable id for this browser, backed by the signed session cookie.
+    Shared by rate limiting and the agents/chats stores below so they all
+    scope to the same identity."""
+    if 'uid' not in session:
+        session['uid'] = uuid.uuid4().hex
+        session.permanent = True
+    return session['uid']
+
+
+# Per-browser rate limiting, keyed off the same session cookie the
+# agents/chats stores use below - a sturdier unit than IP, which can be
+# shared by many unrelated users (NAT/CGNAT/VPN/office network) or split
+# across several IPs for one user (mobile networks). In-memory storage is
+# process-local (fine for a single dev/demo instance; a multi-process
+# deployment would need a shared backend like Redis instead). The default
+# covers every route; chat/regenerate get a tighter limit since those are the
+# ones that actually cost LLM API calls.
 limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=_get_or_create_session_uid,
     app=app,
     default_limits=["60 per minute"],
     storage_uri="memory://",
@@ -141,18 +155,12 @@ _arena_executor = ThreadPoolExecutor(max_workers=2)
 
 def get_session_agents():
     """Return the agents dict belonging to the current browser session."""
-    if 'uid' not in session:
-        session['uid'] = uuid.uuid4().hex
-        session.permanent = True
-    return agents_by_session.setdefault(session['uid'], {})
+    return agents_by_session.setdefault(_get_or_create_session_uid(), {})
 
 
 def get_session_chats():
     """Return the arena chats dict belonging to the current browser session."""
-    if 'uid' not in session:
-        session['uid'] = uuid.uuid4().hex
-        session.permanent = True
-    return chats_by_session.setdefault(session['uid'], {})
+    return chats_by_session.setdefault(_get_or_create_session_uid(), {})
 
 
 class ImageValidationError(ValueError):
@@ -504,6 +512,10 @@ def chat_with_agent(agent_id):
         if not isinstance(message, str) or len(message) > MAX_PROMPT_LENGTH:
             return jsonify({'success': False, 'error': f'Message must be a string of at most {MAX_PROMPT_LENGTH} characters'}), 400
 
+        # Deliberately IP-based, not session-based like the rate limiter above -
+        # see quota_store's module docstring: a cookie is trivial to clear, so
+        # the cost-protection budget needs the sturdier (if coarser) IP as its
+        # key, even though request-rate limiting is now per-browser.
         ip = get_remote_address()
         if not quota_store.has_budget(ip):
             return jsonify({'success': False, 'error': 'Daily testing limit reached.', 'quota_exceeded': True}), 429

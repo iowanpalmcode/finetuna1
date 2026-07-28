@@ -112,7 +112,13 @@ def _get_client_and_model(needs_vision: bool = False) -> tuple[OpenAI, str]:
     else:
         model = os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODEL
 
-    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key)
+    # An explicit timeout (well under gunicorn's --timeout in render.yaml) so
+    # a slow/hung OpenRouter request raises APITimeoutError - which the route
+    # already catches and turns into a clean JSON error - instead of running
+    # long enough for gunicorn to kill the whole worker mid-request, which
+    # otherwise reaches the browser as a raw HTML error page and breaks the
+    # frontend's response.json() parsing.
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key, timeout=45.0, max_retries=1)
     return client, model
 
 
