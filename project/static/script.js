@@ -7,7 +7,6 @@ const THINKING_MESSAGES = [
     'Putting it all together…'
 ];
 const TOUR_KEY = 'aimotional_arena_tour_done';
-const ROUND_COLLAPSE_HEIGHT = 220; // px - past rounds taller than this auto-minimize
 const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const PROMPT_SUGGESTIONS = [
@@ -171,12 +170,17 @@ async function switchToChat(chatId) {
             messages.innerHTML = emptyStateHTML();
         } else {
             rounds.forEach((round, index) => {
-                appendBubble('user', round.message);
-                const roundEl = renderHistoricalRound(round);
-                // Every round except the most recent one is "past" the moment
+                const turnEl = document.createElement('div');
+                turnEl.className = 'chat-turn';
+                messages.appendChild(turnEl);
+
+                appendBubble('user', round.message, turnEl);
+                renderHistoricalRound(round, turnEl);
+
+                // Every turn except the most recent one is "past" the moment
                 // history loads, so it's eligible to auto-minimize right away.
                 if (index < rounds.length - 1) {
-                    maybeCollapseRound(roundEl);
+                    maybeCollapseTurn(turnEl);
                 }
             });
         }
@@ -367,17 +371,27 @@ async function submitPrompt() {
     const message = input.value.trim();
     if (!message || roundInFlight || roundPending || quotaExceeded) return;
 
-    document.getElementById('chatMessages').querySelector('.chat-empty-state')?.remove();
-    appendBubble('user', message);
+    const messages = document.getElementById('chatMessages');
+    messages.querySelector('.chat-empty-state')?.remove();
+
+    // The turn that was previously "current" is now past - minimize it so
+    // the window doesn't just keep growing turn after turn.
+    maybeCollapseTurn(messages.querySelector('.chat-turn:last-of-type'));
+
+    const turnEl = document.createElement('div');
+    turnEl.className = 'chat-turn';
+    messages.appendChild(turnEl);
+
+    appendBubble('user', message, turnEl);
 
     const imageToSend = pendingImage ? pendingImage.dataUrl : null;
-    if (imageToSend) appendUserImage(imageToSend);
+    if (imageToSend) appendUserImage(imageToSend, turnEl);
     clearPendingImage();
 
     input.value = '';
     autoGrow(input);
 
-    const roundEl = appendArenaRoundPlaceholder();
+    const roundEl = appendArenaRoundPlaceholder(turnEl);
     setSendingState(true);
     roundInFlight = true;
 
@@ -416,13 +430,7 @@ function setSendingState(disabled) {
     document.getElementById('chatInput').disabled = disabled;
 }
 
-function appendArenaRoundPlaceholder() {
-    const messages = document.getElementById('chatMessages');
-
-    // The round that was previously "current" is now past - minimize it if
-    // it's tall, so the window doesn't just keep growing round after round.
-    maybeCollapseRound(messages.querySelector('.arena-round:last-of-type'));
-
+function appendArenaRoundPlaceholder(turnEl) {
     const round = document.createElement('div');
     round.className = 'arena-round';
     round.innerHTML = `
@@ -431,7 +439,8 @@ function appendArenaRoundPlaceholder() {
             ${arenaOptionPlaceholderHTML('B')}
         </div>
     `;
-    messages.appendChild(round);
+    turnEl.appendChild(round);
+    const messages = document.getElementById('chatMessages');
     messages.scrollTop = messages.scrollHeight;
 
     round.querySelectorAll('.arena-option-body').forEach(bubble => {
@@ -488,8 +497,7 @@ function fillArenaOption(roundEl, label, reply, traits) {
 // options immediately (no thinking state) and either reveals the result
 // (already voted) or wires live vote buttons (left dangling from before) -
 // which, unlike a freshly generated round, does not gate the input.
-function renderHistoricalRound(round) {
-    const messages = document.getElementById('chatMessages');
+function renderHistoricalRound(round, turnEl) {
     const roundEl = document.createElement('div');
     roundEl.className = 'arena-round';
     roundEl.dataset.roundId = round.round_id;
@@ -500,7 +508,7 @@ function renderHistoricalRound(round) {
         </div>
         ${round.had_image ? '<p class="arena-round-note">📎 An image was attached to this round.</p>' : ''}
     `;
-    messages.appendChild(roundEl);
+    turnEl.appendChild(roundEl);
 
     fillArenaOption(roundEl, 'A', round.option_a.reply, round.option_a.traits);
     fillArenaOption(roundEl, 'B', round.option_b.reply, round.option_b.traits);
@@ -562,38 +570,43 @@ function revealArenaResult(roundEl, winningOption) {
     });
 }
 
-// ----- Auto-minimize past rounds (keeps the window from filling up with
-// long replies) - a round only collapses once it's no longer the current
-// one, and never fights a user who's explicitly expanded it back open. -----
+// ----- Auto-minimize past turns (keeps the window from filling up as more
+// prompts/replies pile up) - a turn only collapses once it's no longer the
+// current one, and never fights a user who's explicitly expanded it back
+// open. Collapsing just hides the turn's content behind a compact summary
+// row; nothing is removed, so scrolling up and expanding it still works. -----
 
-function maybeCollapseRound(roundEl) {
-    if (!roundEl || roundEl.classList.contains('is-collapsed') || roundEl.dataset.userExpanded === '1') return;
+function maybeCollapseTurn(turnEl) {
+    if (!turnEl || turnEl.classList.contains('is-collapsed') || turnEl.dataset.userExpanded === '1') return;
 
-    const bodies = roundEl.querySelectorAll('.arena-option-body');
-    const isTall = [...bodies].some(body => body.scrollHeight > ROUND_COLLAPSE_HEIGHT);
-    if (!isTall) return;
-
-    roundEl.classList.add('is-collapsed');
-    addRoundToggle(roundEl);
+    turnEl.classList.add('is-collapsed');
+    addTurnSummary(turnEl);
 }
 
-function addRoundToggle(roundEl) {
-    if (roundEl.querySelector('.round-toggle-btn')) return;
+function addTurnSummary(turnEl) {
+    let summary = turnEl.querySelector('.turn-summary');
+    if (!summary) {
+        summary = document.createElement('button');
+        summary.type = 'button';
+        summary.className = 'turn-summary';
+        summary.innerHTML = `
+            <span class="turn-summary-text"></span>
+            <span class="turn-summary-chevron">▾</span>
+        `;
+        summary.addEventListener('click', () => toggleTurnCollapse(turnEl));
+        turnEl.insertBefore(summary, turnEl.firstChild);
+    }
 
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'round-toggle-btn';
-    toggle.textContent = 'Show full responses ▾';
-    toggle.addEventListener('click', () => toggleRoundCollapse(roundEl));
-    roundEl.appendChild(toggle);
+    const promptBubble = turnEl.querySelector('.chat-bubble-user');
+    summary.querySelector('.turn-summary-text').textContent = promptBubble ? promptBubble.textContent : 'Previous round';
 }
 
-function toggleRoundCollapse(roundEl) {
-    const nowCollapsed = roundEl.classList.toggle('is-collapsed');
-    roundEl.dataset.userExpanded = nowCollapsed ? '' : '1';
+function toggleTurnCollapse(turnEl) {
+    const nowCollapsed = turnEl.classList.toggle('is-collapsed');
+    turnEl.dataset.userExpanded = nowCollapsed ? '' : '1';
 
-    const toggle = roundEl.querySelector('.round-toggle-btn');
-    if (toggle) toggle.textContent = nowCollapsed ? 'Show full responses ▾' : 'Collapse ▴';
+    const chevron = turnEl.querySelector('.turn-summary-chevron');
+    if (chevron) chevron.textContent = nowCollapsed ? '▾' : '▴';
 }
 
 // ----- Rotating prompt suggestions -----
@@ -683,13 +696,14 @@ function clearPendingImage() {
     document.getElementById('imagePreviewThumb').src = '';
 }
 
-function appendUserImage(dataUrl) {
-    const messages = document.getElementById('chatMessages');
+function appendUserImage(dataUrl, container) {
+    const target = container || document.getElementById('chatMessages');
     const img = document.createElement('img');
     img.className = 'chat-image-bubble';
     img.src = dataUrl;
     img.alt = 'Attached image';
-    messages.appendChild(img);
+    target.appendChild(img);
+    const messages = document.getElementById('chatMessages');
     messages.scrollTop = messages.scrollHeight;
 }
 
@@ -864,12 +878,13 @@ function endTour() {
 
 // ----- Chat bubbles / typing indicator -----
 
-function appendBubble(role, text) {
-    const messages = document.getElementById('chatMessages');
+function appendBubble(role, text, container) {
+    const target = container || document.getElementById('chatMessages');
     const bubble = document.createElement('div');
     bubble.className = `chat-bubble chat-bubble-${role}`;
     bubble.textContent = text;
-    messages.appendChild(bubble);
+    target.appendChild(bubble);
+    const messages = document.getElementById('chatMessages');
     messages.scrollTop = messages.scrollHeight;
     return bubble;
 }

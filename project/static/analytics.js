@@ -1,6 +1,8 @@
 // Public Arena analytics page: fetch global aggregate stats and render them
 // as hand-built HTML/CSS bars (no chart library, no CDN - consistent with
-// the rest of the app) driven entirely by the theme's CSS custom properties.
+// the rest of the app) driven entirely by the theme's CSS custom properties,
+// plus two Chart.js canvases (radar snapshot + rating-over-time line) since
+// those chart types aren't practical to hand-roll in CSS.
 //
 // The page ships with static skeleton placeholders already in the HTML (see
 // templates/analytics.html) so there's something on screen instantly; this
@@ -8,6 +10,10 @@
 
 const ITEMS_PER_PAGE = 7;
 const paginationState = { glicko: 0, winRate: 0, length: 0, combos: 0 };
+
+function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
 
 document.addEventListener('DOMContentLoaded', loadAnalytics);
 
@@ -43,6 +49,8 @@ function renderAnalytics(summary) {
 
     renderStatTiles(summary);
     renderGlickoChart(summary);
+    renderRadarChart(summary);
+    renderHistoryChart(summary);
     renderWinRateChart(summary);
     renderLengthChart(summary);
     renderComboTable(summary);
@@ -132,6 +140,96 @@ function renderGlickoChart(summary) {
     };
 
     renderPaginatedSection('glicko', summary.traits, 'glickoChart', 'glickoPagination', rowFn, NOT_ENOUGH_TRAIT_VOTES_HTML);
+}
+
+function renderRadarChart(summary) {
+    const canvas = document.getElementById('traitRadarChart');
+    if (!canvas) return;
+
+    // summary.traits is already sorted by glicko_rating descending, and
+    // trait_history covers the same top slice - reuse that count so the
+    // radar's axes match what the timeline picker below offers.
+    const topTraits = summary.traits.slice(0, Object.keys(summary.trait_history).length || 10);
+    if (!topTraits.length) return;
+
+    const accent = cssVar('--accent') || '#667eea';
+    const gridColor = cssVar('--border-panel') || '#ccc';
+    const labelColor = cssVar('--text-body') || '#333';
+
+    if (canvas._chart) canvas._chart.destroy();
+    canvas._chart = new Chart(canvas, {
+        type: 'radar',
+        data: {
+            labels: topTraits.map(t => t.name),
+            datasets: [{
+                label: 'Glicko rating',
+                data: topTraits.map(t => t.glicko_rating),
+                backgroundColor: accent + '33',
+                borderColor: accent,
+                pointBackgroundColor: accent,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                r: {
+                    grid: { color: gridColor },
+                    angleLines: { color: gridColor },
+                    pointLabels: { color: labelColor },
+                    ticks: { display: false },
+                },
+            },
+            plugins: { legend: { display: false } },
+        },
+    });
+}
+
+function renderHistoryChart(summary) {
+    const canvas = document.getElementById('historyChart');
+    const picker = document.getElementById('historyTraitPicker');
+    if (!canvas || !picker) return;
+
+    const traitNames = Object.keys(summary.trait_history);
+    if (!traitNames.length) return;
+
+    const previousChoice = picker.value;
+    picker.innerHTML = traitNames.map(name => `<option value="${name}">${name}</option>`).join('');
+    picker.value = traitNames.includes(previousChoice) ? previousChoice : traitNames[0];
+
+    const draw = () => {
+        const series = summary.trait_history[picker.value] || [];
+        const accent = cssVar('--accent') || '#667eea';
+        const gridColor = cssVar('--border-panel') || '#ccc';
+        const labelColor = cssVar('--text-muted') || '#666';
+
+        if (canvas._chart) canvas._chart.destroy();
+        canvas._chart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: series.map(p => `#${p.round}`),
+                datasets: [{
+                    label: `${picker.value} rating`,
+                    data: series.map(p => p.rating),
+                    borderColor: accent,
+                    backgroundColor: accent,
+                    tension: 0.2,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { color: labelColor }, grid: { color: gridColor } },
+                    y: { ticks: { color: labelColor }, grid: { color: gridColor } },
+                },
+                plugins: { legend: { display: false } },
+            },
+        });
+    };
+
+    picker.onchange = draw;
+    draw();
 }
 
 function renderWinRateChart(summary) {

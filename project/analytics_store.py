@@ -27,6 +27,10 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 # noise off the charts.
 MIN_SAMPLE_SIZE = 3
 
+# How many top-rated traits get a rating-history series in the summary (also
+# the radar chart's axis count) - keeps both bounded as the trait pool grows.
+TRAIT_HISTORY_LIMIT = 10
+
 _init_lock = threading.Lock()
 _initialized = False
 
@@ -136,11 +140,53 @@ def record_vote(round_id: int, option: str) -> bool:
             return cur.rowcount > 0
 
 
+def _fetch_glicko_rounds(cur) -> List[glicko.Round]:
+    """
+    Every voted round as (traits_a, traits_b, voted_option), round-grouped
+    (not per-option) and chronologically ordered, since Glicko needs both
+    sides of each match together, processed as successive rating periods -
+    see glicko.compute_ratings.
+    """
+    cur.execute(
+        """
+        SELECT r.round_id, r.voted_option, o.option_label, o.traits_json
+        FROM arena_rounds r
+        JOIN arena_options o ON o.round_id = r.round_id
+        WHERE r.voted_option IS NOT NULL
+        ORDER BY r.round_id ASC, o.option_label ASC
+        """
+    )
+    round_rows = cur.fetchall()
+
+    glicko_rounds: List[glicko.Round] = []
+    pending_traits: Dict[str, List[str]] = {}
+    for row in round_rows:
+        pending_traits[row["option_label"]] = json.loads(row["traits_json"])
+        if row["option_label"] == "B":
+            glicko_rounds.append((pending_traits["A"], pending_traits["B"], row["voted_option"]))
+            pending_traits = {}
+    return glicko_rounds
+
+
+def get_trait_ratings() -> Dict[str, Dict[str, float]]:
+    """
+    Current Glicko rating/rd for every trait that has appeared in at least
+    one voted round, unfiltered by MIN_SAMPLE_SIZE - used to steer which
+    traits Arena rounds pick next (see ui_server._select_arena_teams), not
+    just to display a leaderboard.
+    """
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            glicko_rounds = _fetch_glicko_rounds(cur)
+    return glicko.compute_ratings(glicko_rounds)
+
+
 def get_analytics_summary() -> Dict:
     """
     Aggregate every voted round into the stats the /analytics page needs:
     overall totals, per-trait Glicko rating / win rate / usage / avg response
-    length, and a leaderboard of the top trait combinations.
+    length, a leaderboard of the top trait combinations, and each top
+    trait's rating history over time.
     """
     with _connect() as conn:
         with conn.cursor() as cur:
@@ -161,19 +207,7 @@ def get_analytics_summary() -> Dict:
             )
             rows = cur.fetchall()
 
-            # Round-grouped (not per-option) and chronologically ordered, since
-            # Glicko needs both sides of each match together, processed as
-            # successive rating periods - see glicko.compute_ratings.
-            cur.execute(
-                """
-                SELECT r.round_id, r.voted_option, o.option_label, o.traits_json
-                FROM arena_rounds r
-                JOIN arena_options o ON o.round_id = r.round_id
-                WHERE r.voted_option IS NOT NULL
-                ORDER BY r.round_id ASC, o.option_label ASC
-                """
-            )
-            round_rows = cur.fetchall()
+            glicko_rounds = _fetch_glicko_rounds(cur)
 
     per_trait: Dict[str, Dict] = {}
     per_combo: Dict[str, Dict] = {}
@@ -200,14 +234,7 @@ def get_analytics_summary() -> Dict:
             entry["times_won"] += 1 if won else 0
             entry["_length_sum"] += length
 
-    glicko_rounds: List[glicko.Round] = []
-    pending_traits: Dict[str, List[str]] = {}
-    for row in round_rows:
-        pending_traits[row["option_label"]] = json.loads(row["traits_json"])
-        if row["option_label"] == "B":
-            glicko_rounds.append((pending_traits["A"], pending_traits["B"], row["voted_option"]))
-            pending_traits = {}
-    ratings = glicko.compute_ratings(glicko_rounds)
+    ratings, history = glicko.compute_ratings_with_history(glicko_rounds)
 
     trait_stats = []
     for entry in per_trait.values():
@@ -242,6 +269,15 @@ def get_analytics_summary() -> Dict:
         )
     combo_stats.sort(key=lambda c: (c["win_rate"], c["times_used"]), reverse=True)
 
+    # Only the top traits (by current rating) get a history series - matches
+    # the radar chart's axis count, and keeps the payload from growing
+    # unbounded as more distinct traits accumulate history over time.
+    trait_history = {
+        t["name"]: history[t["name"]]
+        for t in trait_stats[:TRAIT_HISTORY_LIMIT]
+        if t["name"] in history
+    }
+
     return {
         "total_rounds": total_rounds,
         "total_votes": total_votes,
@@ -251,5 +287,6 @@ def get_analytics_summary() -> Dict:
         # No hard cap here anymore - the /analytics page paginates client-side,
         # same as the trait charts, so there's no need to silently truncate.
         "top_combos": combo_stats,
+        "trait_history": trait_history,
         "min_sample_size": MIN_SAMPLE_SIZE,
     }

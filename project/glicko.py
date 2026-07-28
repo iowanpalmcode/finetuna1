@@ -53,10 +53,42 @@ def compute_ratings(rounds: List[Round]) -> Dict[str, Dict[str, float]]:
         appeared in at least one round. Traits never seen aren't included
         (callers can treat them as the default 1500/350 if needed).
     """
+    ratings, rds, _history = _compute(rounds)
+    return {
+        name: {"rating": round(ratings[name], 1), "rd": round(rds[name], 1)}
+        for name in ratings
+    }
+
+
+def compute_ratings_with_history(
+    rounds: List[Round],
+) -> Tuple[Dict[str, Dict[str, float]], Dict[str, List[Dict[str, float]]]]:
+    """
+    Same computation as compute_ratings, but also returns each trait's rating
+    trajectory - one point per rating period in which that trait played a
+    game (sparse per-trait, not one entry per round overall).
+
+    Returns:
+        (ratings, history) where ratings matches compute_ratings' return, and
+        history is {trait_name: [{"round": period_index, "rating": float,
+        "rd": float}, ...]} in chronological order.
+    """
+    ratings, rds, history = _compute(rounds)
+    final = {
+        name: {"rating": round(ratings[name], 1), "rd": round(rds[name], 1)}
+        for name in ratings
+    }
+    return final, history
+
+
+def _compute(
+    rounds: List[Round],
+) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, List[Dict[str, float]]]]:
     ratings: Dict[str, float] = {}
     rds: Dict[str, float] = {}
+    history: Dict[str, List[Dict[str, float]]] = {}
 
-    for traits_a, traits_b, voted_option in rounds:
+    for period_index, (traits_a, traits_b, voted_option) in enumerate(rounds):
         games: List[Tuple[str, str, float]] = []  # (player, opponent, score)
         for trait_a in traits_a:
             for trait_b in traits_b:
@@ -103,8 +135,8 @@ def compute_ratings(rounds: List[Round]) -> Dict[str, Dict[str, float]]:
 
             ratings[player] = new_r
             rds[player] = max(MIN_RD, min(MAX_RD, new_rd))
+            history.setdefault(player, []).append(
+                {"round": period_index, "rating": round(new_r, 1), "rd": round(rds[player], 1)}
+            )
 
-    return {
-        name: {"rating": round(ratings[name], 1), "rd": round(rds[name], 1)}
-        for name in ratings
-    }
+    return ratings, rds, history

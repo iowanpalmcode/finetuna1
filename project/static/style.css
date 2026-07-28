@@ -1282,10 +1282,16 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    text-decoration: underline;
+    text-decoration-style: dashed;
+    text-decoration-color: var(--border-input);
+    text-underline-offset: 3px;
 }
 
 .suggestion-overlay:hover {
     color: var(--text-secondary);
+    text-decoration-style: solid;
+    text-decoration-color: var(--text-secondary);
 }
 
 /* Attached image */
@@ -1336,6 +1342,15 @@ body {
     max-height: 220px;
     border-radius: 12px;
     object-fit: cover;
+}
+
+/* Each turn (user prompt + optional image + the arena round) is wrapped in
+   one of these so they can be minimized together - see maybeCollapseTurn()
+   in script.js. */
+.chat-turn {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .arena-round-note {
@@ -1389,44 +1404,52 @@ body {
     align-self: stretch;
 }
 
-/* Auto-minimized past rounds: both option bodies get capped and faded so a
-   long reply doesn't keep the chat window growing forever - see
-   maybeCollapseRound() in script.js. A short option isn't visually affected
-   since its content never reaches the cap. */
-.arena-round.is-collapsed .arena-option-body {
-    max-height: 220px;
-    overflow: hidden;
-    position: relative;
+/* Auto-minimized past turns: every child (prompt bubble, image, arena round)
+   is hidden and replaced by a single compact summary row, so old turns take
+   up almost no space and the window doesn't keep growing turn after turn -
+   see maybeCollapseTurn() in script.js. Scrolling up still reaches them;
+   they're just visually collapsed, not removed. */
+.chat-turn.is-collapsed > .chat-bubble,
+.chat-turn.is-collapsed > .chat-image-bubble,
+.chat-turn.is-collapsed > .arena-round {
+    display: none;
 }
 
-.arena-round.is-collapsed .arena-option-body::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 52px;
-    background: linear-gradient(to bottom, transparent, var(--bg-bubble-assistant));
-    pointer-events: none;
-}
-
-.round-toggle-btn {
-    align-self: center;
-    margin-top: 10px;
-    background: none;
+.turn-summary {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg-widget);
     border: 1px solid var(--border-input);
-    border-radius: 999px;
-    padding: 5px 16px;
-    font-size: 0.8em;
+    border-radius: 10px;
     color: var(--text-secondary);
+    font-size: 0.9em;
+    text-align: left;
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
-.round-toggle-btn:hover {
+.chat-turn.is-collapsed .turn-summary {
+    display: flex;
+}
+
+.turn-summary:hover {
     background: var(--bg-hover);
     border-color: var(--accent);
     color: var(--text-body);
+}
+
+.turn-summary-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.turn-summary-chevron {
+    flex-shrink: 0;
 }
 
 /* Markdown rendered inside a reply - see renderMarkdown() in script.js */
@@ -1820,6 +1843,28 @@ body {
     color: var(--text-muted);
     font-size: 0.9em;
     font-style: italic;
+}
+
+.chart-canvas-wrap {
+    position: relative;
+    height: 320px;
+}
+
+.chart-picker-label {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    margin-bottom: 12px;
+}
+
+.chart-picker-label select {
+    margin-left: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-input);
+    border-radius: 4px;
+    font-size: 0.95em;
+    background: var(--bg-input);
+    color: var(--text-body);
 }
 
 .bar-chart {

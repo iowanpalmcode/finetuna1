@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analytics - AIMotional</title>
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -51,6 +52,25 @@
                             {% endfor %}
                         </div>
                         <div class="pagination-controls" id="glickoPagination"></div>
+                    </div>
+
+                    <div class="chart-card">
+                        <h2>Trait ratings — snapshot</h2>
+                        <p class="chart-subtitle">Top traits by current Glicko rating, plotted together for shape comparison</p>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="traitRadarChart" height="320"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <h2>Trait ratings — over time</h2>
+                        <p class="chart-subtitle">How a trait's Glicko rating has moved as more rounds were voted on</p>
+                        <label for="historyTraitPicker" class="chart-picker-label">Trait:
+                            <select id="historyTraitPicker"></select>
+                        </label>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="historyChart" height="320"></canvas>
+                        </div>
                     </div>
 
                     <div class="chart-card">

@@ -28,6 +28,7 @@ load_dotenv()
 from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
 
 import analytics_store
+import glicko
 import quota_store
 from agent import AIAgent
 from llm_client import LLMNotConfiguredError
@@ -107,6 +108,17 @@ MAX_CHATS_PER_SESSION = 20
 ARENA_MIN_TRAITS = 1
 ARENA_MAX_TRAITS = 3
 ARENA_TRAIT_INTENSITY = 0.7
+
+# Active learning: instead of picking both sides fully at random, generate a
+# handful of candidate team pairs (each team weighted toward high-RD /
+# under-sampled traits - see _weighted_random_team) and keep the pair whose
+# aggregate ratings are closest. A near-even matchup is the most informative
+# vote a user can cast under Glicko, and RD-weighting means traits Glicko is
+# already confident about get asked about less often over time. A small
+# fraction of rounds stay fully random so the pool never over-narrows onto
+# only the traits that have played before.
+ARENA_CANDIDATE_POOL_SIZE = 6
+ARENA_EXPLORATION_PROB = 0.15
 
 # Image uploads: validated but never decoded/resized server-side (no Pillow)
 # so a crafted "tiny file, huge dimensions" image can't exhaust server memory
@@ -549,15 +561,60 @@ def regenerate_agent_reply(agent_id):
         return jsonify({'success': False, 'error': str(e)}), 400
 
 
-def _build_arena_agent(name: str) -> tuple[AIAgent, list[str]]:
-    """Create an ephemeral agent with a random 1-3 traits at a fixed intensity."""
+def _build_arena_agent(name: str, trait_names: list[str]) -> AIAgent:
+    """Create an ephemeral agent carrying the given traits at a fixed intensity."""
     agent = AIAgent(name=name)
-    available = agent.list_available_traits()
-    count = min(random.randint(ARENA_MIN_TRAITS, ARENA_MAX_TRAITS), len(available))
-    trait_names = random.sample(available, k=count)
     for trait_name in trait_names:
         agent.add_trait(trait_name, intensity=ARENA_TRAIT_INTENSITY, weight=1.0)
-    return agent, trait_names
+    return agent
+
+
+def _weighted_sample_without_replacement(items: list[str], weights: list[float], k: int) -> list[str]:
+    """random.choices is with-replacement and random.sample doesn't take
+    weights - trait lists are small, so repeatedly drawing-and-removing is
+    simple and fast enough."""
+    pool = list(items)
+    pool_weights = list(weights)
+    picked = []
+    for _ in range(min(k, len(pool))):
+        [choice] = random.choices(pool, weights=pool_weights, k=1)
+        idx = pool.index(choice)
+        pool.pop(idx)
+        pool_weights.pop(idx)
+        picked.append(choice)
+    return picked
+
+
+def _weighted_random_team(available: list[str], ratings: dict) -> list[str]:
+    """Pick 1-3 traits, weighted toward high-RD (uncertain) traits so Arena
+    naturally asks less about traits Glicko is already confident about.
+    Traits with no history yet default to the maximum RD, so new traits are
+    prioritized too."""
+    count = min(random.randint(ARENA_MIN_TRAITS, ARENA_MAX_TRAITS), len(available))
+    weights = [ratings.get(t, {}).get("rd", glicko.DEFAULT_RD) for t in available]
+    return _weighted_sample_without_replacement(available, weights, count)
+
+
+def _team_rating(traits: list[str], ratings: dict) -> float:
+    values = [ratings.get(t, {}).get("rating", glicko.DEFAULT_RATING) for t in traits]
+    return sum(values) / len(values) if values else glicko.DEFAULT_RATING
+
+
+def _select_arena_teams(available: list[str], ratings: dict) -> tuple[list[str], list[str]]:
+    """Pick this round's two trait teams (see ARENA_CANDIDATE_POOL_SIZE/
+    ARENA_EXPLORATION_PROB above for the reasoning)."""
+    if random.random() < ARENA_EXPLORATION_PROB:
+        return _weighted_random_team(available, ratings), _weighted_random_team(available, ratings)
+
+    best_pair = None
+    best_gap = None
+    for _ in range(ARENA_CANDIDATE_POOL_SIZE):
+        team_a = _weighted_random_team(available, ratings)
+        team_b = _weighted_random_team(available, ratings)
+        gap = abs(_team_rating(team_a, ratings) - _team_rating(team_b, ratings))
+        if best_gap is None or gap < best_gap:
+            best_pair, best_gap = (team_a, team_b), gap
+    return best_pair
 
 
 def _find_chat_and_round(chats, chat_id, round_id):
@@ -605,8 +662,11 @@ def create_arena_round():
         if not quota_store.has_budget(ip):
             return jsonify({'success': False, 'error': 'Daily testing limit reached.', 'quota_exceeded': True}), 429
 
-        agent_a, traits_a = _build_arena_agent("Arena Option A")
-        agent_b, traits_b = _build_arena_agent("Arena Option B")
+        ratings = analytics_store.get_trait_ratings()
+        available = AIAgent(name="Arena").list_available_traits()
+        traits_a, traits_b = _select_arena_teams(available, ratings)
+        agent_a = _build_arena_agent("Arena Option A", traits_a)
+        agent_b = _build_arena_agent("Arena Option B", traits_b)
 
         future_a = _arena_executor.submit(agent_a.generate_llm_reply, message, False, image_data_url)
         future_b = _arena_executor.submit(agent_b.generate_llm_reply, message, False, image_data_url)
