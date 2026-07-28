@@ -134,6 +134,12 @@ ARENA_TRAIT_INTENSITY = 0.7
 ARENA_CANDIDATE_POOL_SIZE = 6
 ARENA_EXPLORATION_PROB = 0.15
 
+# After a vote, 1 in 5 rounds ask the user what made their pick better - a
+# lightweight, occasional prompt rather than one on every single vote (which
+# would get old fast and tank response rates).
+FEEDBACK_PROMPT_PROB = 0.2
+MAX_FEEDBACK_LENGTH = analytics_store.MAX_FEEDBACK_LENGTH
+
 # Image uploads: validated but never decoded/resized server-side (no Pillow)
 # so a crafted "tiny file, huge dimensions" image can't exhaust server memory
 # here - the raw bytes are only ever inspected for size and a magic-number
@@ -247,6 +253,14 @@ def privacy():
 def about():
     """Serve the About page (project intro + author info)."""
     return render_template('about.html')
+
+
+@app.route('/traits-guide')
+def traits_guide():
+    """Serve a glossary of every personality trait and what it does."""
+    agent = AIAgent(name="TraitsGuide")
+    traits = sorted(agent.trait_manager.list_trait_details(), key=lambda t: t['name'].lower())
+    return render_template('traits_guide.html', traits=traits)
 
 
 @app.route('/analytics')
@@ -739,6 +753,28 @@ def vote_arena_round(round_id):
             _, round_record = _find_chat_and_round(chats, chat_id, round_id)
             if round_record is not None:
                 round_record['voted_option'] = option
+
+        return jsonify({'success': True, 'show_feedback_prompt': random.random() < FEEDBACK_PROMPT_PROB})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/arena/round/<int:round_id>/feedback', methods=['POST'])
+@limiter.limit("10 per minute")
+def submit_arena_feedback(round_id):
+    """Record optional free-text feedback on why the voted-for option was better."""
+    try:
+        data = request.json or {}
+        feedback_text = data.get('feedback', '')
+
+        if not isinstance(feedback_text, str) or not feedback_text.strip():
+            return jsonify({'success': False, 'error': 'Feedback text is required'}), 400
+        if len(feedback_text) > MAX_FEEDBACK_LENGTH:
+            return jsonify({'success': False, 'error': f'Feedback must be at most {MAX_FEEDBACK_LENGTH} characters'}), 400
+
+        saved = analytics_store.record_feedback(round_id, feedback_text.strip())
+        if not saved:
+            return jsonify({'success': False, 'error': 'Round not found, not yet voted on, or already has feedback'}), 409
 
         return jsonify({'success': True})
     except Exception as e:

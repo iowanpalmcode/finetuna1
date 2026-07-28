@@ -31,6 +31,8 @@ MIN_SAMPLE_SIZE = 3
 # the radar chart's axis count) - keeps both bounded as the trait pool grows.
 TRAIT_HISTORY_LIMIT = 10
 
+MAX_FEEDBACK_LENGTH = 1000
+
 _init_lock = threading.Lock()
 _initialized = False
 
@@ -92,6 +94,14 @@ def init_db() -> None:
 
                     CREATE INDEX IF NOT EXISTS idx_arena_options_round ON arena_options(round_id);
                     CREATE INDEX IF NOT EXISTS idx_arena_options_traits_key ON arena_options(traits_key);
+
+                    CREATE TABLE IF NOT EXISTS arena_feedback (
+                        id            SERIAL PRIMARY KEY,
+                        round_id      INTEGER NOT NULL UNIQUE REFERENCES arena_rounds(round_id),
+                        voted_option  TEXT NOT NULL CHECK (voted_option IN ('A', 'B')),
+                        feedback_text TEXT NOT NULL,
+                        created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
                     """
                 )
         _initialized = True
@@ -136,6 +146,29 @@ def record_vote(round_id: int, option: str) -> bool:
             cur.execute(
                 "UPDATE arena_rounds SET voted_option = %s WHERE round_id = %s AND voted_option IS NULL",
                 (option, round_id),
+            )
+            return cur.rowcount > 0
+
+
+def record_feedback(round_id: int, feedback_text: str) -> bool:
+    """
+    Record open-ended "what made A/B better" feedback for a round, in its own
+    table (structural analytics stays separate from free-text user input).
+
+    Returns True if saved, False if the round doesn't exist, hasn't been
+    voted on yet, or already has feedback (one submission per round).
+    """
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO arena_feedback (round_id, voted_option, feedback_text)
+                SELECT round_id, voted_option, %s
+                FROM arena_rounds
+                WHERE round_id = %s AND voted_option IS NOT NULL
+                ON CONFLICT (round_id) DO NOTHING
+                """,
+                (feedback_text, round_id),
             )
             return cur.rowcount > 0
 

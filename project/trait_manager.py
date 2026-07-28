@@ -170,12 +170,27 @@ class TraitManager:
     def list_available_traits(self) -> List[str]:
         """
         Get all available trait classes (discovered but not necessarily active).
-        
+
         Returns:
             List of trait class names
         """
         return list(self._trait_classes.keys())
-    
+
+    def list_trait_details(self) -> List[Dict[str, str]]:
+        """
+        Get name + description for every discovered trait (not just active
+        ones) - e.g. for a traits guide page. Each class is instantiated at
+        default intensity/weight just to read its name/description; nothing
+        is added to active_traits.
+
+        Returns:
+            List of {"name": ..., "description": ...} dicts, one per trait class.
+        """
+        return [
+            {"name": trait_cls().name, "description": trait_cls().description}
+            for trait_cls in self._trait_classes.values()
+        ]
+
     def get_aggregate_profile(self) -> Dict[str, Any]:
         """
         Generate an aggregate behavioral profile from all active traits.

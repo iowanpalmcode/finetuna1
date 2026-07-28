@@ -71,6 +71,8 @@
                 <a href="{{ url_for('terms') }}">Terms of Service</a>
                 &nbsp;·&nbsp;
                 <a href="{{ url_for('privacy') }}">Privacy Policy</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('traits_guide') }}">Traits Guide</a>
             </p>
         </footer>
     </div>
@@ -132,6 +134,22 @@
             </div>
             <div class="modal-actions">
                 <button type="button" id="quotaModalCloseBtn" class="btn btn-primary">Got it</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="feedbackModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2>What made it better?</h2>
+            </div>
+            <div class="modal-body">
+                <p id="feedbackPrompt"></p>
+                <textarea id="feedbackText" class="chat-input" rows="3" maxlength="1000" placeholder="Funnier, more accurate, better tone..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="feedbackSkipBtn" class="btn btn-text">Skip</button>
+                <button type="button" id="feedbackSubmitBtn" class="btn btn-primary">Submit</button>
             </div>
         </div>
     </div>

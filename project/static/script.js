@@ -44,6 +44,7 @@ let chatListOpen = false;
 let deleteConfirmStage = 0; // 0 = closed, 1 = first warning, 2 = typed confirmation
 let pendingImage = null;   // { dataUrl, name } - session-only, never sent anywhere but the next round
 let suggestionIndex = 0;
+let pendingFeedbackRoundId = null; // round awaiting the "what made it better" popup, if any
 
 // Theme is already applied by theme.js (loaded synchronously in <head>,
 // before this file), so there's nothing to do here beyond wiring up events.
@@ -105,6 +106,13 @@ function setupEventListeners() {
     // Quota modal
     document.getElementById('quotaModalCloseBtn').addEventListener('click', () => {
         document.getElementById('quotaModal').style.display = 'none';
+    });
+
+    // Feedback modal (shown after ~1 in 5 votes)
+    document.getElementById('feedbackSkipBtn').addEventListener('click', closeFeedbackModal);
+    document.getElementById('feedbackSubmitBtn').addEventListener('click', submitFeedback);
+    document.getElementById('feedbackModal').addEventListener('click', (e) => {
+        if (e.target.id === 'feedbackModal') closeFeedbackModal();
     });
 
     // Tour
@@ -550,11 +558,57 @@ async function castVote(roundEl, option) {
         revealArenaResult(roundEl, option);
         roundPending = false;
         setSendingState(quotaExceeded);
-        if (!quotaExceeded) document.getElementById('chatInput').focus();
+        if (data.show_feedback_prompt) {
+            openFeedbackModal(roundId, option);
+        } else if (!quotaExceeded) {
+            document.getElementById('chatInput').focus();
+        }
         refreshChatList();
     } catch (error) {
         showError('Error recording vote: ' + error.message);
         buttons.forEach(btn => btn.disabled = false);
+    }
+}
+
+function openFeedbackModal(roundId, option) {
+    pendingFeedbackRoundId = roundId;
+    document.getElementById('feedbackPrompt').textContent =
+        `You picked Option ${option} - what made it better than the other reply? (optional)`;
+    document.getElementById('feedbackText').value = '';
+    document.getElementById('feedbackModal').style.display = 'flex';
+}
+
+function closeFeedbackModal() {
+    pendingFeedbackRoundId = null;
+    document.getElementById('feedbackModal').style.display = 'none';
+    if (!quotaExceeded) document.getElementById('chatInput').focus();
+}
+
+async function submitFeedback() {
+    const roundId = pendingFeedbackRoundId;
+    const feedback = document.getElementById('feedbackText').value.trim();
+    if (!roundId || !feedback) {
+        closeFeedbackModal();
+        return;
+    }
+
+    const submitBtn = document.getElementById('feedbackSubmitBtn');
+    submitBtn.disabled = true;
+    try {
+        const response = await fetch(`/api/arena/round/${roundId}/feedback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ feedback })
+        });
+        const data = await parseJsonResponse(response);
+        if (!data.success) {
+            showError('Failed to save feedback: ' + data.error);
+        }
+    } catch (error) {
+        showError('Error saving feedback: ' + error.message);
+    } finally {
+        submitBtn.disabled = false;
+        closeFeedbackModal();
     }
 }
 

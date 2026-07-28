@@ -848,6 +848,81 @@ body {
     color: var(--accent);
 }
 
+/* Traits guide page - wider than .legal-section since it's a grid of many
+   short cards, not a column of paragraphs. */
+.traits-guide-section {
+    max-width: 1100px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+.traits-guide-section a {
+    color: var(--accent);
+}
+
+.traits-guide-intro {
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+}
+
+.traits-filter-input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border-input);
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 1em;
+    background: var(--bg-input);
+    color: var(--text-body);
+    margin-bottom: 6px;
+    transition: border-color 0.2s;
+}
+
+.traits-filter-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
+}
+
+.traits-filter-count {
+    color: var(--text-muted);
+    font-size: 0.85em;
+    margin-bottom: 16px;
+    min-height: 1.2em;
+}
+
+.traits-guide-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+}
+
+.trait-guide-card {
+    background: var(--bg-widget);
+    border: 1px solid var(--border-panel);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+
+.trait-guide-name {
+    font-weight: 700;
+    color: var(--text-body);
+    margin-bottom: 4px;
+}
+
+.trait-guide-description {
+    color: var(--text-secondary);
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+.traits-guide-empty {
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+    padding: 30px 0;
+}
+
 /* Responsive */
 @media (max-width: 900px) {
     .main {
