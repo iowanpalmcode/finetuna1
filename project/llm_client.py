@@ -58,6 +58,13 @@ class LLMNotConfiguredError(Exception):
     """Raised when no real OpenRouter API key (or, for images, vision model) is available."""
 
 
+class LLMEmptyReplyError(Exception):
+    """Raised when the model returned no text content after all retries -
+    some free/upstream models occasionally do this (content filtering, an
+    empty completion, or a reasoning model that left `message.content` null)
+    without the API call itself failing."""
+
+
 def _intensity_to_adverb(intensity: float) -> str:
     """Convert an intensity value to an English adverb."""
     if intensity < 0.2:
@@ -136,7 +143,12 @@ def _call_model(client: OpenAI, model: str, messages: List[Dict[str, str]]) -> t
             completion = client.chat.completions.create(model=model, messages=messages)
             content = completion.choices[0].message.content
             total_tokens = completion.usage.total_tokens if completion.usage else 0
-            return content, total_tokens
+            if content:
+                return content, total_tokens
+            # A "successful" call with no text back is treated the same as a
+            # transient failure - worth one retry rather than handing an
+            # empty/None reply to callers that assume a real string.
+            last_error = LLMEmptyReplyError("The model returned an empty reply.")
         except (APIConnectionError, APITimeoutError, RateLimitError) as e:
             last_error = e
         except APIStatusError as e:

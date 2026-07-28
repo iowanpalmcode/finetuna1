@@ -31,7 +31,7 @@ import analytics_store
 import glicko
 import quota_store
 from agent import AIAgent
-from llm_client import LLMNotConfiguredError
+from llm_client import LLMEmptyReplyError, LLMNotConfiguredError
 
 LLM_UNAVAILABLE_MESSAGE = "The AI service isn't working right now. Please try again later."
 
@@ -547,7 +547,7 @@ def chat_with_agent(agent_id):
         })
     except LLMNotConfiguredError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
-    except (APIConnectionError, APITimeoutError, RateLimitError, APIStatusError):
+    except (APIConnectionError, APITimeoutError, RateLimitError, APIStatusError, LLMEmptyReplyError):
         return jsonify({'success': False, 'error': LLM_UNAVAILABLE_MESSAGE}), 503
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
@@ -581,7 +581,7 @@ def regenerate_agent_reply(agent_id):
         return jsonify({'success': False, 'error': str(e)}), 400
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
-    except (APIConnectionError, APITimeoutError, RateLimitError, APIStatusError):
+    except (APIConnectionError, APITimeoutError, RateLimitError, APIStatusError, LLMEmptyReplyError):
         return jsonify({'success': False, 'error': LLM_UNAVAILABLE_MESSAGE}), 503
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
@@ -726,7 +726,7 @@ def create_arena_round():
         })
     except LLMNotConfiguredError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
-    except (APIConnectionError, APITimeoutError, RateLimitError, APIStatusError):
+    except (APIConnectionError, APITimeoutError, RateLimitError, APIStatusError, LLMEmptyReplyError):
         return jsonify({'success': False, 'error': LLM_UNAVAILABLE_MESSAGE}), 503
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
