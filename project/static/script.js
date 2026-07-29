@@ -8,11 +8,11 @@ const THINKING_MESSAGES = [
 ];
 const TOUR_KEY = 'aimotional_arena_tour_done';
 
-// Must match llm_client.DEFAULT_MODEL_ID and the radio values in the
-// Settings modal's #modelOptions - there's no server round-trip for this
+// Must match llm_client.DEFAULT_MODEL_ID and the <option> values in the
+// Settings modal's #modelSelect - there's no server round-trip for this
 // small, rarely-changing list (same approach as the theme picker).
 const MODEL_STORAGE_KEY = 'aimotional_model_id';
-const DEFAULT_MODEL_ID = 'gpt-oss-20b';
+const DEFAULT_MODEL_ID = 'nemotron-3-nano';
 
 function getSelectedModelId() {
     return localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_MODEL_ID;
@@ -991,19 +991,34 @@ function setupThemeControls() {
 }
 
 function setupModelControls() {
-    const radio = document.querySelector(`input[name="model"][value="${getSelectedModelId()}"]`);
-    if (radio) radio.checked = true;
-
-    document.querySelectorAll('input[name="model"]').forEach(input => {
-        input.addEventListener('change', () => {
-            if (!input.checked) return;
-            localStorage.setItem(MODEL_STORAGE_KEY, input.value);
-        });
+    const select = document.getElementById('modelSelect');
+    select.value = getSelectedModelId();
+    select.addEventListener('change', () => {
+        localStorage.setItem(MODEL_STORAGE_KEY, select.value);
     });
+}
+
+async function refreshUsage() {
+    const usageText = document.getElementById('usageText');
+    try {
+        const response = await fetch('/api/quota');
+        const data = await parseJsonResponse(response);
+        if (!data.success) {
+            usageText.textContent = 'Could not load usage: ' + data.error;
+            return;
+        }
+        usageText.textContent =
+            `${data.used_tokens.toLocaleString()} / ${data.daily_budget.toLocaleString()} tokens used today ` +
+            `- about ${data.estimated_rounds_remaining.toLocaleString()} more Arena replies left ` +
+            `(resets at midnight).`;
+    } catch (error) {
+        usageText.textContent = 'Could not load usage: ' + error.message;
+    }
 }
 
 function openSettingsModal() {
     document.getElementById('settingsModal').style.display = 'flex';
+    refreshUsage();
 }
 
 function closeSettingsModal() {

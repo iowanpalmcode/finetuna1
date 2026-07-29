@@ -4,10 +4,12 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    # --timeout 120: comfortably above the OpenAI client's 45s timeout x2
-    # retries (see llm_client.py) so a slow OpenRouter response gets caught
-    # and turned into a clean JSON error by the route itself, instead of
-    # gunicorn silently killing the worker mid-request first.
+    # --timeout 120: comfortably above the OpenAI client's 30s timeout x2
+    # attempts (see llm_client.py's _MAX_RETRIES) - worst case ~61.5s per
+    # Arena side - so a slow OpenRouter response gets caught and turned into
+    # a clean JSON error by the route itself, instead of gunicorn silently
+    # killing the worker mid-request first (which used to surface to users
+    # as a raw "status 500" instead of a real error message).
     startCommand: gunicorn --bind 0.0.0.0:$PORT --timeout 120 ui_server:app
     envVars:
       - key: PYTHON_VERSION

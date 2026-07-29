@@ -801,6 +801,32 @@ def get_analytics():
         return jsonify({'success': False, 'error': str(e)}), 400
 
 
+# Rough tokens-per-round estimate for the Settings modal's "X replies left"
+# figure - matches quota_store's own "roughly 800-1000 tokens combined" note
+# for a text round. An estimate, not a guarantee: actual usage varies with
+# reply length (bounded by llm_client._MAX_REPLY_TOKENS) and image rounds
+# cost far more.
+_ESTIMATED_TOKENS_PER_ROUND = 900
+
+
+@app.route('/api/quota', methods=['GET'])
+def get_quota():
+    """This browser's daily token usage/remaining, for the Settings modal."""
+    try:
+        ip = get_remote_address()
+        used = quota_store.used(ip)
+        remaining = quota_store.remaining(ip)
+        return jsonify({
+            'success': True,
+            'used_tokens': used,
+            'remaining_tokens': remaining,
+            'daily_budget': quota_store.DAILY_TOKEN_BUDGET,
+            'estimated_rounds_remaining': remaining // _ESTIMATED_TOKENS_PER_ROUND,
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
 @app.route('/api/chats', methods=['GET'])
 def list_chats():
     """List this session's arena chats, newest first."""

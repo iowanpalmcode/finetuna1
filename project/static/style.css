@@ -1772,6 +1772,17 @@ body {
     font-size: 0.95em;
 }
 
+.settings-select {
+    width: 100%;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border-input);
+    border-radius: 6px;
+    font-size: 0.95em;
+    background: var(--bg-input);
+    color: var(--text-body);
+}
+
 /* ==========================================================================
    First-run guided tour
    ========================================================================== */

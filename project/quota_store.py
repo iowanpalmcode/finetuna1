@@ -32,6 +32,11 @@ def _key(ip: str) -> Tuple[str, str]:
     return (ip, date.today().isoformat())
 
 
+def used(ip: str) -> int:
+    with _lock:
+        return _usage.get(_key(ip), 0)
+
+
 def remaining(ip: str) -> int:
     with _lock:
         return max(0, DAILY_TOKEN_BUDGET - _usage.get(_key(ip), 0))

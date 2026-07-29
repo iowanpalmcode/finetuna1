@@ -43,11 +43,11 @@ _DEFAULT_LING_MODEL = "inclusionai/ling-3.0-flash:free"
 # go through DEFAULT_VISION_MODEL/OPENROUTER_VISION_MODEL above regardless of
 # this selection - none of these are vision-capable picks.
 MODEL_CHOICES: Dict[str, Dict[str, str]] = {
-    "gpt-oss-20b": {"label": "GPT-OSS 20B", "model": os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODEL},
     "nemotron-3-nano": {
         "label": "Nemotron 3 Nano",
         "model": os.environ.get("OPENROUTER_MODEL_NEMOTRON") or _DEFAULT_NEMOTRON_MODEL,
     },
+    "gpt-oss-20b": {"label": "GPT-OSS 20B", "model": os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODEL},
     "gemma-4-26b-a4b": {
         "label": "Gemma 4 26B A4B",
         "model": os.environ.get("OPENROUTER_MODEL_GEMMA") or _DEFAULT_GEMMA_MODEL,
@@ -57,15 +57,25 @@ MODEL_CHOICES: Dict[str, Dict[str, str]] = {
         "model": os.environ.get("OPENROUTER_MODEL_LING") or _DEFAULT_LING_MODEL,
     },
 }
-DEFAULT_MODEL_ID = "gpt-oss-20b"
+DEFAULT_MODEL_ID = "nemotron-3-nano"
 
 # OpenRouter's free-tier backing providers occasionally throw a transient
 # 429/5xx ("temporarily rate-limited upstream, please retry shortly") that
 # clears up on an immediate retry - without this, every one of those blips
-# surfaced straight to the user as a bare failed chat request.
-_MAX_RETRIES = 2
+# surfaced straight to the user as a bare failed chat request. Kept to just
+# one retry (2 attempts total): worst case is attempts * client timeout +
+# backoff = 2*30 + 1.5 = 61.5s, comfortably under gunicorn's request
+# timeout even with both Arena sides in flight - a 3rd attempt would push
+# that past what's safe (see _get_client_and_model's timeout comment).
+_MAX_RETRIES = 1
 _RETRY_BASE_DELAY_SECONDS = 1.5
 _RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+# Caps worst-case generation time by bounding output length - a runaway
+# verbose reply from a slower free-tier model was a real contributor to
+# requests blowing past gunicorn's timeout. Generous enough for a normal
+# chat reply; matches the ballpark quota_store already assumes per round.
+_MAX_REPLY_TOKENS = 700
 
 # In-memory cache for identical (system prompt, history, message) requests -
 # avoids burning free-tier rate limits and API latency on repeats. Keyed by a
@@ -152,15 +162,17 @@ def _get_client_and_model(needs_vision: bool = False, model_id: Optional[str] = 
     elif model_id in MODEL_CHOICES:
         model = MODEL_CHOICES[model_id]["model"]
     else:
-        model = os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODEL
+        model = MODEL_CHOICES[DEFAULT_MODEL_ID]["model"]
 
-    # An explicit timeout (well under gunicorn's --timeout in render.yaml) so
-    # a slow/hung OpenRouter request raises APITimeoutError - which the route
-    # already catches and turns into a clean JSON error - instead of running
-    # long enough for gunicorn to kill the whole worker mid-request, which
-    # otherwise reaches the browser as a raw HTML error page and breaks the
-    # frontend's response.json() parsing.
-    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key, timeout=45.0, max_retries=1)
+    # A tight-ish timeout, and only ONE retry layer (ours, in _call_model,
+    # not also the SDK's - max_retries=0 here) so the total worst-case wait
+    # is predictable: with _MAX_RETRIES attempts below, worst case is
+    # roughly attempts * timeout, which needs to stay well under gunicorn's
+    # --timeout in render.yaml. Blowing past that timeout is what used to
+    # surface to users as a raw HTML "status 500" instead of the clean JSON
+    # error these routes normally return - gunicorn kills the worker
+    # mid-request before Flask's own except blocks ever get to run.
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key, timeout=30.0, max_retries=0)
     return client, model
 
 
@@ -175,7 +187,7 @@ def _call_model(client: OpenAI, model: str, messages: List[Dict[str, str]]) -> t
 
     for attempt in range(_MAX_RETRIES + 1):
         try:
-            completion = client.chat.completions.create(model=model, messages=messages)
+            completion = client.chat.completions.create(model=model, messages=messages, max_tokens=_MAX_REPLY_TOKENS)
             content = completion.choices[0].message.content
             total_tokens = completion.usage.total_tokens if completion.usage else 0
             if content:
