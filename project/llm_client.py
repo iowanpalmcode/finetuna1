@@ -28,6 +28,37 @@ DEFAULT_MODEL = "openai/gpt-oss-20b:free"
 # current one is confirmed working, not treated as a permanent guarantee.
 DEFAULT_VISION_MODEL = "meta-llama/llama-3.2-11b-vision-instruct:free"
 
+# Same "best-effort, override if it goes stale" reasoning as
+# DEFAULT_VISION_MODEL above - free-tier slugs get renamed/deprecated on
+# OpenRouter periodically, so each has its own env var override rather than
+# being baked in with no escape hatch.
+_DEFAULT_NEMOTRON_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
+_DEFAULT_GEMMA_MODEL = "google/gemma-4-26b-a4b-it:free"
+_DEFAULT_LING_MODEL = "inclusionai/ling-3.0-flash:free"
+
+# User-selectable text models (see the Settings modal). Keys are the stable
+# ids used in requests/localStorage - safe to reorder or relabel without
+# breaking anything already stored client-side, but never repurpose a key for
+# a different model. Deliberately separate from image requests, which always
+# go through DEFAULT_VISION_MODEL/OPENROUTER_VISION_MODEL above regardless of
+# this selection - none of these are vision-capable picks.
+MODEL_CHOICES: Dict[str, Dict[str, str]] = {
+    "gpt-oss-20b": {"label": "GPT-OSS 20B", "model": os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODEL},
+    "nemotron-3-nano": {
+        "label": "Nemotron 3 Nano",
+        "model": os.environ.get("OPENROUTER_MODEL_NEMOTRON") or _DEFAULT_NEMOTRON_MODEL,
+    },
+    "gemma-4-26b-a4b": {
+        "label": "Gemma 4 26B A4B",
+        "model": os.environ.get("OPENROUTER_MODEL_GEMMA") or _DEFAULT_GEMMA_MODEL,
+    },
+    "ling-3.0-flash": {
+        "label": "Ling-3.0 Flash",
+        "model": os.environ.get("OPENROUTER_MODEL_LING") or _DEFAULT_LING_MODEL,
+    },
+}
+DEFAULT_MODEL_ID = "gpt-oss-20b"
+
 # OpenRouter's free-tier backing providers occasionally throw a transient
 # 429/5xx ("temporarily rate-limited upstream, please retry shortly") that
 # clears up on an immediate retry - without this, every one of those blips
@@ -46,9 +77,9 @@ _CACHE_TTL_SECONDS = 600
 _CACHE_MAX_ENTRIES = 200
 
 
-def _cache_key(system_prompt: str, history: List[Dict[str, str]], user_message: str) -> str:
+def _cache_key(system_prompt: str, history: List[Dict[str, str]], user_message: str, model_id: str) -> str:
     payload = json.dumps(
-        {"system": system_prompt, "history": history, "message": user_message},
+        {"system": system_prompt, "history": history, "message": user_message, "model_id": model_id},
         sort_keys=True,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -107,7 +138,7 @@ def build_system_prompt(active_traits: Dict[str, BaseTrait]) -> str:
     return " ".join(lines)
 
 
-def _get_client_and_model(needs_vision: bool = False) -> tuple[OpenAI, str]:
+def _get_client_and_model(needs_vision: bool = False, model_id: Optional[str] = None) -> tuple[OpenAI, str]:
     api_key = os.environ.get("OPENROUTER_API_KEY", "")
     if not api_key or api_key == PLACEHOLDER_KEY:
         raise LLMNotConfiguredError(
@@ -115,7 +146,11 @@ def _get_client_and_model(needs_vision: bool = False) -> tuple[OpenAI, str]:
         )
 
     if needs_vision:
+        # The user's model picker never applies to image requests - none of
+        # MODEL_CHOICES are vision-capable, so this always routes elsewhere.
         model = os.environ.get("OPENROUTER_VISION_MODEL") or DEFAULT_VISION_MODEL
+    elif model_id in MODEL_CHOICES:
+        model = MODEL_CHOICES[model_id]["model"]
     else:
         model = os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODEL
 
@@ -168,6 +203,7 @@ def generate_reply(
     user_message: str,
     bypass_cache: bool = False,
     image_data_url: Optional[str] = None,
+    model_id: Optional[str] = None,
 ) -> tuple[str, int]:
     """
     Generate an assistant reply given a system prompt, prior turns, and a new
@@ -183,6 +219,9 @@ def generate_reply(
         image_data_url: Optional `data:image/...;base64,...` URL to attach to
             the user message. Routes the call through a vision-capable model
             and always bypasses the cache.
+        model_id: Key into MODEL_CHOICES selecting which text model to use.
+            Ignored when image_data_url is set (see _get_client_and_model).
+            Falls back to OPENROUTER_MODEL/DEFAULT_MODEL if None or unknown.
 
     Returns:
         (reply_text, tokens_charged). tokens_charged is 0 on a cache hit
@@ -191,7 +230,7 @@ def generate_reply(
     has_image = image_data_url is not None
     effective_bypass = bypass_cache or has_image
 
-    key = _cache_key(system_prompt, history, user_message)
+    key = _cache_key(system_prompt, history, user_message, model_id or DEFAULT_MODEL_ID)
     now = time.time()
 
     if not effective_bypass:
@@ -199,7 +238,7 @@ def generate_reply(
         if cached is not None and now - cached[0] < _CACHE_TTL_SECONDS:
             return cached[1], 0
 
-    client, model = _get_client_and_model(needs_vision=has_image)
+    client, model = _get_client_and_model(needs_vision=has_image, model_id=model_id)
 
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(history)

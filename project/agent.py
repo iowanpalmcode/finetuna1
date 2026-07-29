@@ -215,7 +215,11 @@ class AIAgent:
         return modified_response
     
     def generate_llm_reply(
-        self, user_message: str, bypass_cache: bool = False, image_data_url: Optional[str] = None
+        self,
+        user_message: str,
+        bypass_cache: bool = False,
+        image_data_url: Optional[str] = None,
+        model_id: Optional[str] = None,
     ) -> tuple[str, int]:
         """
         Generate a reply through the LLM, with active traits woven into the
@@ -229,6 +233,9 @@ class AIAgent:
                 alongside the message. Never added to message_history - only
                 the text of a turn is remembered, so a multi-turn
                 conversation doesn't keep re-sending an old image forever.
+            model_id: Key into llm_client.MODEL_CHOICES selecting which text
+                model to use (ignored for image requests). See
+                llm_client.generate_reply.
 
         Returns:
             (reply_text, tokens_charged) - see llm_client.generate_reply.
@@ -246,6 +253,7 @@ class AIAgent:
                 user_message,
                 bypass_cache=bypass_cache,
                 image_data_url=image_data_url,
+                model_id=model_id,
             )
 
             self.message_history.append({"role": "user", "content": user_message})
@@ -253,11 +261,15 @@ class AIAgent:
 
             return reply, tokens_charged
 
-    def regenerate_last_reply(self) -> tuple[str, int]:
+    def regenerate_last_reply(self, model_id: Optional[str] = None) -> tuple[str, int]:
         """
         Re-generate the assistant's most recent reply to the same user message,
         using the agent's current active traits (e.g. after the user changes
         their trait selection).
+
+        Args:
+            model_id: Key into llm_client.MODEL_CHOICES selecting which text
+                model to use for the new attempt.
 
         Returns:
             (reply_text, tokens_charged) for the new reply.
@@ -273,7 +285,7 @@ class AIAgent:
             self.message_history.pop()  # last assistant reply
             last_user = self.message_history.pop()  # matching user message
 
-            return self.generate_llm_reply(last_user["content"], bypass_cache=True)
+            return self.generate_llm_reply(last_user["content"], bypass_cache=True, model_id=model_id)
 
     def trigger_behavior_hook(self, hook_name: str, context: Dict[str, Any]) -> Any:
         """

@@ -31,7 +31,7 @@ import analytics_store
 import glicko
 import quota_store
 from agent import AIAgent
-from llm_client import LLMEmptyReplyError, LLMNotConfiguredError
+from llm_client import DEFAULT_MODEL_ID, MODEL_CHOICES, LLMEmptyReplyError, LLMNotConfiguredError
 
 LLM_UNAVAILABLE_MESSAGE = "The AI service isn't working right now. Please try again later."
 
@@ -535,7 +535,7 @@ def chat_with_agent(agent_id):
             return jsonify({'success': False, 'error': 'Daily testing limit reached.', 'quota_exceeded': True}), 429
 
         agent = agents[agent_id]
-        reply, tokens_charged = agent.generate_llm_reply(message)
+        reply, tokens_charged = agent.generate_llm_reply(message, model_id=_resolve_model_id(data))
         quota_store.charge(ip, tokens_charged)
 
         profile = agent.get_behavioral_profile()
@@ -562,12 +562,14 @@ def regenerate_agent_reply(agent_id):
         if agent_id not in agents:
             return jsonify({'success': False, 'error': 'Agent not found'}), 404
 
+        data = request.json or {}
+
         ip = get_remote_address()
         if not quota_store.has_budget(ip):
             return jsonify({'success': False, 'error': 'Daily testing limit reached.', 'quota_exceeded': True}), 429
 
         agent = agents[agent_id]
-        reply, tokens_charged = agent.regenerate_last_reply()
+        reply, tokens_charged = agent.regenerate_last_reply(model_id=_resolve_model_id(data))
         quota_store.charge(ip, tokens_charged)
 
         profile = agent.get_behavioral_profile()
@@ -643,6 +645,14 @@ def _select_arena_teams(available: list[str], ratings: dict) -> tuple[list[str],
     return best_pair
 
 
+def _resolve_model_id(data: dict) -> str:
+    """Validate the client-supplied model choice against the server-side
+    allow-list, falling back to the default rather than trusting an
+    arbitrary string through to the OpenRouter API."""
+    model_id = data.get('model_id')
+    return model_id if model_id in MODEL_CHOICES else DEFAULT_MODEL_ID
+
+
 def _find_chat_and_round(chats, chat_id, round_id):
     """Look up a round dict by id within one of this session's chats, or (None, None)."""
     chat = chats.get(chat_id)
@@ -669,6 +679,7 @@ def create_arena_round():
         message = data.get('message', '')
         chat_id = data.get('chat_id')
         image_data_url = data.get('image')
+        model_id = _resolve_model_id(data)
 
         if not message:
             return jsonify({'success': False, 'error': 'Message is required'}), 400
@@ -694,8 +705,8 @@ def create_arena_round():
         agent_a = _build_arena_agent("Arena Option A", traits_a)
         agent_b = _build_arena_agent("Arena Option B", traits_b)
 
-        future_a = _arena_executor.submit(agent_a.generate_llm_reply, message, False, image_data_url)
-        future_b = _arena_executor.submit(agent_b.generate_llm_reply, message, False, image_data_url)
+        future_a = _arena_executor.submit(agent_a.generate_llm_reply, message, False, image_data_url, model_id)
+        future_b = _arena_executor.submit(agent_b.generate_llm_reply, message, False, image_data_url, model_id)
         reply_a, tokens_a = future_a.result()
         reply_b, tokens_b = future_b.result()
         quota_store.charge(ip, tokens_a + tokens_b)

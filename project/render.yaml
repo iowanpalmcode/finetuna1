@@ -26,6 +26,16 @@ services:
         sync: false
       - key: OPENROUTER_MODEL
         sync: false
+      # Same sync: false pattern - the Settings modal's other 3 model
+      # choices each have a code-level default (see llm_client.py's
+      # MODEL_CHOICES), so these are optional overrides for when a free-tier
+      # slug gets renamed/deprecated upstream, not required for first deploy.
+      - key: OPENROUTER_MODEL_NEMOTRON
+        sync: false
+      - key: OPENROUTER_MODEL_GEMMA
+        sync: false
+      - key: OPENROUTER_MODEL_LING
+        sync: false
       # Same sync: false pattern as above - paste your Neon Postgres
       # connection string (from the Neon dashboard, "Connection string",
       # pooled connection) into the Render Dashboard after the first

@@ -98,6 +98,16 @@
                     <p class="settings-hint">Your theme applies across the main app, analytics, and the classic builder.</p>
                 </div>
                 <div class="settings-section">
+                    <h3>Model</h3>
+                    <div class="theme-options model-options" id="modelOptions">
+                        <label><input type="radio" name="model" value="gpt-oss-20b"> GPT-OSS 20B</label>
+                        <label><input type="radio" name="model" value="nemotron-3-nano"> Nemotron 3 Nano</label>
+                        <label><input type="radio" name="model" value="gemma-4-26b-a4b"> Gemma 4 26B A4B</label>
+                        <label><input type="radio" name="model" value="ling-3.0-flash"> Ling-3.0 Flash</label>
+                    </div>
+                    <p class="settings-hint">Both Arena replies use this model - only personality traits differ between them. Free-tier OpenRouter models.</p>
+                </div>
+                <div class="settings-section">
                     <h3>Danger Zone</h3>
                     <p class="settings-hint">Permanently delete every chat in this session. This cannot be undone.</p>
                     <button type="button" id="deleteAllBtn" class="btn btn-danger">Delete All Chats</button>

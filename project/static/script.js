@@ -8,6 +8,16 @@ const THINKING_MESSAGES = [
 ];
 const TOUR_KEY = 'aimotional_arena_tour_done';
 
+// Must match llm_client.DEFAULT_MODEL_ID and the radio values in the
+// Settings modal's #modelOptions - there's no server round-trip for this
+// small, rarely-changing list (same approach as the theme picker).
+const MODEL_STORAGE_KEY = 'aimotional_model_id';
+const DEFAULT_MODEL_ID = 'gpt-oss-20b';
+
+function getSelectedModelId() {
+    return localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_MODEL_ID;
+}
+
 // Parses a fetch Response as JSON, but fails with a clear message instead of
 // the cryptic "Unexpected token '<'" crash when the server (or a hosting
 // platform's proxy, on a slow/timed-out request) returns an HTML error page
@@ -51,6 +61,7 @@ let pendingFeedbackRoundId = null; // round awaiting the "what made it better" p
 document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     setupThemeControls();
+    setupModelControls();
     setupSuggestions();
     setupImageHandlers();
     await initChats();
@@ -411,7 +422,7 @@ async function submitPrompt() {
         const response = await fetch('/api/arena/round', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, chat_id: currentChatId, image: imageToSend })
+            body: JSON.stringify({ message, chat_id: currentChatId, image: imageToSend, model_id: getSelectedModelId() })
         });
         const data = await parseJsonResponse(response);
 
@@ -975,6 +986,18 @@ function setupThemeControls() {
         input.addEventListener('change', () => {
             if (!input.checked) return;
             window.AIMotionalTheme.set(input.value);
+        });
+    });
+}
+
+function setupModelControls() {
+    const radio = document.querySelector(`input[name="model"][value="${getSelectedModelId()}"]`);
+    if (radio) radio.checked = true;
+
+    document.querySelectorAll('input[name="model"]').forEach(input => {
+        input.addEventListener('change', () => {
+            if (!input.checked) return;
+            localStorage.setItem(MODEL_STORAGE_KEY, input.value);
         });
     });
 }
