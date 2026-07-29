@@ -59,6 +59,13 @@ let pendingFeedbackRoundId = null; // round awaiting the "what made it better" p
 // Theme is already applied by theme.js (loaded synchronously in <head>,
 // before this file), so there's nothing to do here beyond wiring up events.
 document.addEventListener('DOMContentLoaded', async () => {
+    // Fire-and-forget: nudges a spun-down Render instance (and cold Neon
+    // compute) awake now, while the user is still reading/typing, instead
+    // of that cold-start latency landing on their first real Arena request
+    // and competing with its own LLM timeout budget. Nothing here depends
+    // on the result, so failures are silently ignored.
+    fetch('/api/warmup').catch(() => {});
+
     setupEventListeners();
     setupThemeControls();
     setupModelControls();

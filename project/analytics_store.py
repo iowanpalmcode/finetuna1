@@ -107,6 +107,19 @@ def init_db() -> None:
         _initialized = True
 
 
+def ping() -> None:
+    """
+    Trivial round-trip that does no real work - just opens a connection and
+    runs SELECT 1. Used by ui_server's /api/warmup, which the frontend fires
+    on page load to nudge a cold Neon compute endpoint (it has its own
+    scale-to-zero behavior, separate from Render's) awake before the user's
+    first real request needs it, instead of eating that latency there.
+    """
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+
+
 def _traits_key(traits: List[str]) -> str:
     return ",".join(sorted(traits))
 

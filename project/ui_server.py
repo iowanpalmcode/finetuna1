@@ -792,6 +792,29 @@ def submit_arena_feedback(round_id):
         return jsonify({'success': False, 'error': str(e)}), 400
 
 
+@app.route('/api/warmup', methods=['GET'])
+def warmup():
+    """
+    Fired by the frontend on page load, before the user has typed anything -
+    a cheap way to absorb Render's free-tier spin-down cold start (and
+    Neon's own separate cold start) outside the critical path of the user's
+    first real Arena request, which otherwise has to eat that latency on top
+    of its own LLM budget and can blow past gunicorn's timeout (see
+    render.yaml). Best-effort: local dev without DATABASE_URL configured
+    still returns success, since Flask itself being up is the main thing
+    this needs to confirm in that case.
+    """
+    try:
+        analytics_store.ping()
+    except Exception:
+        # Best-effort only - a slow/unreachable DB here shouldn't fail page
+        # load or get surfaced as an error the user has to react to. Not
+        # configured locally, a cold Neon endpoint being briefly outright
+        # unreachable, transient network hiccups - all fine to just swallow.
+        pass
+    return jsonify({'success': True})
+
+
 @app.route('/api/analytics', methods=['GET'])
 def get_analytics():
     """Public, global aggregate stats for the Analytics page."""
