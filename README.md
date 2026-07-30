@@ -1,4 +1,3 @@
-What this is
 AIMotional is a small, experimental tool for exploring how combining personality traits (like Confident, Calm, Aggressive, or Playful) could shape the tone of a response. Drag traits onto an agent, tune how strongly each one applies, and see a side-by-side comparison of the original text versus the "personality-modified" version. It's built on a modular trait system where each trait is an independent, swappable module rather than a single hardcoded behavior.
 
 In the Main arena, most rounds pit two differently-trait-shaped replies against each other, but on a random minority of rounds one side is left completely trait-free as a plain baseline reply - so over time the Analytics page can show not just which traits people prefer, but whether adding any personality at all tends to beat a neutral response.
