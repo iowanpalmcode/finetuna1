@@ -12,8 +12,8 @@
     <div class="container">
         <header class="header">
             <div class="header-content">
-                <h1>🎭🎭 AIMotional</h1>
-                <p>Drag traits to create unique agent personalities</p>
+                <h1 id="classicTitle">🎭🎭 AIMotional</h1>
+                <p>Tap, click, or drag traits to create unique agent personalities</p>
                 <p class="classic-nav"><a href="{{ url_for('index') }}">💬 Try the new chat experience →</a></p>
             </div>
         </header>
@@ -25,7 +25,7 @@
                     <h2>Available Emotions & Traits</h2>
                     <button type="button" id="toggleTraitsBtn" class="btn-collapse" title="Collapse">▾</button>
                 </div>
-                <p class="subtitle">Drag to add to your agent</p>
+                <p class="subtitle">Tap or click a trait to add it - or drag it in on desktop</p>
                 <input type="text" id="traitSearch" class="trait-search-input" placeholder="🔍 Search emotions or traits...">
                 <div id="favoritesBar" class="favorites-bar" style="display: none;"></div>
                 <div id="traitsContainer" class="traits-list">
@@ -124,10 +124,22 @@
                 <a href="{{ url_for('privacy') }}">Privacy Policy</a>
                 &nbsp;·&nbsp;
                 <a href="{{ url_for('traits_guide') }}">Traits Guide</a>
-                &nbsp;·&nbsp;
-                <a href="https://forms.gle/JfDQaJUi49z3igwcA" target="_blank" rel="noopener noreferrer">Research link</a>
             </p>
         </footer>
+    </div>
+
+    <!-- First-run guided tour -->
+    <div id="tourOverlay" class="tour-overlay" style="display: none;">
+        <div id="tourSpotlight" class="tour-spotlight"></div>
+        <div id="tourTooltip" class="tour-tooltip">
+            <p class="tour-step-count" id="tourStepCount"></p>
+            <h3 id="tourTitle"></h3>
+            <p id="tourBody"></p>
+            <div class="tour-actions">
+                <button type="button" id="tourSkipBtn" class="btn-text">Skip tour</button>
+                <button type="button" id="tourNextBtn" class="btn btn-primary">Next</button>
+            </div>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='classic.js') }}"></script>

@@ -4,6 +4,13 @@ let availableTraits = [];
 let draggedTrait = null;
 let favoriteTraits = new Set(); // session-only, cleared on reload
 
+// Touch/coarse-pointer devices can't do HTML5 drag-and-drop, and leaving
+// draggable=true on those elements is known to make WebKit/Blink fight the
+// browser's own touch-scroll gesture whenever a scroll happens to start on
+// top of a trait badge. Tap-to-add (below) is the only interaction touch
+// devices need, so drag is simply not wired up for them.
+const isTouchDevice = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+
 // Rotating example prompts shown above the prompt textarea
 const PROMPT_SUGGESTIONS = [
     "I will help you with this task.",
@@ -24,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     loadPastAgents();
     startPromptSuggestions();
+    maybeRunTour();
 });
 
 // Cycle through example prompts every 4 seconds; clicking one fills the textarea
@@ -78,6 +86,9 @@ function setupEventListeners() {
             loadAgent(e.target.value);
         }
     });
+
+    document.getElementById('tourNextBtn').addEventListener('click', nextTourStep);
+    document.getElementById('tourSkipBtn').addEventListener('click', endTour);
 }
 
 // Filter the available traits list by name or description
@@ -174,13 +185,25 @@ function renderTraits() {
     renderFavoritesBar();
 }
 
-// Build a single draggable trait badge, including its favorite star toggle
+// Build a single trait badge (draggable on desktop, tap-to-add on touch), including its favorite star toggle
 function createTraitBadge(trait) {
     const badge = document.createElement('div');
     badge.className = 'trait-badge';
-    badge.draggable = true;
     badge.dataset.name = trait.name.toLowerCase();
     badge.dataset.description = (trait.description || '').toLowerCase();
+
+    if (!isTouchDevice) {
+        badge.draggable = true;
+        badge.addEventListener('dragstart', (e) => {
+            draggedTrait = trait;
+            badge.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'copy';
+        });
+
+        badge.addEventListener('dragend', () => {
+            badge.classList.remove('dragging');
+        });
+    }
 
     const isFavorite = favoriteTraits.has(trait.name);
     badge.innerHTML = `
@@ -189,45 +212,46 @@ function createTraitBadge(trait) {
         <button type="button" class="trait-favorite-btn ${isFavorite ? 'active' : ''}" title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">${isFavorite ? '★' : '☆'}</button>
     `;
 
-    badge.addEventListener('dragstart', (e) => {
-        draggedTrait = trait;
-        badge.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'copy';
-    });
+    // A single tap/click adds the trait directly - this is the only way to add a
+    // trait on touch devices (no drag), and is also just a quicker path on desktop.
+    // On touch, this is driven off 'touchend' rather than 'click' so a tap can be
+    // told apart from a scroll: a scroll also fires 'touchend' on whatever element
+    // is under the finger when it lifts, so a real tap is only one where the touch
+    // barely moved and didn't linger. preventDefault() on a genuine tap stops the
+    // synthetic 'click' Android/iOS fire afterward, which would otherwise add the
+    // trait a second time.
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    const TAP_MOVE_THRESHOLD = 10; // px
+    const TAP_TIME_THRESHOLD = 500; // ms
 
-    badge.addEventListener('dragend', () => {
-        badge.classList.remove('dragging');
-    });
+    badge.addEventListener('touchstart', (e) => {
+        const touch = e.touches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+        touchStartTime = Date.now();
+    }, { passive: true });
 
-    // Double-click/double-tap adds the trait directly, for touch devices where dragging is awkward.
-    // Mobile browsers don't reliably synthesize a native 'dblclick' from two taps, so double-taps are
-    // detected manually from the timing between taps instead. This is driven off 'touchend' rather
-    // than 'click' because most mobile browsers suppress the synthetic click that normally follows a
-    // touch if the tap happens shortly after the page was scrolled - and scrolling to find a trait
-    // before double-tapping it is exactly the common case here. touchend fires regardless, so we
-    // preventDefault() there to stop the (unreliable) ghost click, and keep the 'click' listener only
-    // as the desktop/mouse path.
-    let lastTapTime = 0;
-    const handleDoubleTap = (e) => {
+    badge.addEventListener('touchend', (e) => {
         if (e.target.closest('.trait-favorite-btn')) return;
 
-        const now = Date.now();
-        const isDoubleTap = now - lastTapTime < 400;
-        lastTapTime = now;
-
-        if (!isDoubleTap) return;
-        lastTapTime = 0;
-        if (e.cancelable) e.preventDefault();
-
-        if (!currentAgentId) {
-            showError('Please create an agent first');
-            return;
+        const touch = e.changedTouches[0];
+        const movedX = Math.abs(touch.clientX - touchStartX);
+        const movedY = Math.abs(touch.clientY - touchStartY);
+        const elapsed = Date.now() - touchStartTime;
+        if (movedX > TAP_MOVE_THRESHOLD || movedY > TAP_MOVE_THRESHOLD || elapsed > TAP_TIME_THRESHOLD) {
+            return; // was a scroll/long-press, not a tap
         }
-        addTraitToAgent(trait.name);
-    };
 
-    badge.addEventListener('touchend', handleDoubleTap);
-    badge.addEventListener('click', handleDoubleTap);
+        if (e.cancelable) e.preventDefault();
+        addTraitOnTap(trait);
+    });
+
+    badge.addEventListener('click', (e) => {
+        if (e.target.closest('.trait-favorite-btn')) return;
+        addTraitOnTap(trait);
+    });
 
     badge.querySelector('.trait-favorite-btn').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -235,6 +259,14 @@ function createTraitBadge(trait) {
     });
 
     return badge;
+}
+
+function addTraitOnTap(trait) {
+    if (!currentAgentId) {
+        showError('Please create an agent first');
+        return;
+    }
+    addTraitToAgent(trait.name);
 }
 
 // Toggle a trait's favorite status and refresh the badges/favorites bar
@@ -638,8 +670,114 @@ function showSuccess(message) {
     `;
     alert.textContent = message;
     document.body.appendChild(alert);
-    
+
     setTimeout(() => {
         alert.remove();
     }, 3000);
+}
+
+// ----- First-run guided tour -----
+
+const TOUR_KEY = 'aimotional_classic_tour_done';
+
+const TOUR_STEPS = [
+    {
+        target: 'classicTitle',
+        title: 'Welcome to the Classic Builder',
+        body: 'Combine trait badges into a custom AI personality, then generate a response and see it change side-by-side with the original.'
+    },
+    {
+        target: 'createAgentBtn',
+        title: 'Create your agent',
+        body: "Give it a name and click Create Agent. You'll need one before you can add any traits."
+    },
+    {
+        target: 'traitsContainer',
+        title: 'Add emotions & traits',
+        body: 'Tap or click any trait below to add it to your agent instantly - one click is all it takes. On desktop you can also drag a trait into the box below instead.'
+    },
+    {
+        target: 'dropZone',
+        title: 'Fine-tune the mix',
+        body: 'Each trait you add appears here with a slider - use it to control how strongly that trait comes through, or remove a trait with the × next to it.'
+    },
+    {
+        target: 'generateBtn',
+        title: 'Generate a response',
+        body: "Type a prompt and click Generate to compare the original wording side-by-side with your agent's personality-shaped version."
+    }
+];
+
+let tourStepIndex = 0;
+
+function maybeRunTour() {
+    if (localStorage.getItem(TOUR_KEY)) return;
+    tourStepIndex = 0;
+    document.getElementById('tourOverlay').style.display = 'block';
+    showTourStep(0);
+    window.addEventListener('resize', repositionTourSpotlight);
+    window.addEventListener('scroll', repositionTourSpotlight, { passive: true });
+}
+
+function showTourStep(index) {
+    tourStepIndex = index;
+    const step = TOUR_STEPS[index];
+    const target = document.getElementById(step.target);
+
+    document.getElementById('tourStepCount').textContent = `Step ${index + 1} of ${TOUR_STEPS.length}`;
+    document.getElementById('tourTitle').textContent = step.title;
+    document.getElementById('tourBody').textContent = step.body;
+    document.getElementById('tourNextBtn').textContent = index === TOUR_STEPS.length - 1 ? 'Done' : 'Next';
+
+    if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    positionTourSpotlight(target);
+}
+
+function positionTourSpotlight(target) {
+    const spotlight = document.getElementById('tourSpotlight');
+    const tooltip = document.getElementById('tourTooltip');
+    if (!target) {
+        spotlight.style.display = 'none';
+        return;
+    }
+    spotlight.style.display = 'block';
+
+    const rect = target.getBoundingClientRect();
+    const pad = 8;
+    spotlight.style.top = `${rect.top - pad}px`;
+    spotlight.style.left = `${rect.left - pad}px`;
+    spotlight.style.width = `${rect.width + pad * 2}px`;
+    spotlight.style.height = `${rect.height + pad * 2}px`;
+
+    const tooltipWidth = 300;
+    const tooltipTop = rect.bottom + 16;
+    const wouldOverflowBottom = tooltipTop + 170 > window.innerHeight;
+
+    tooltip.style.left = `${Math.min(Math.max(rect.left, 16), window.innerWidth - tooltipWidth - 16)}px`;
+    tooltip.style.top = wouldOverflowBottom
+        ? `${Math.max(rect.top - 180, 16)}px`
+        : `${tooltipTop}px`;
+}
+
+function repositionTourSpotlight() {
+    const step = TOUR_STEPS[tourStepIndex];
+    if (!step) return;
+    positionTourSpotlight(document.getElementById(step.target));
+}
+
+function nextTourStep() {
+    if (tourStepIndex >= TOUR_STEPS.length - 1) {
+        endTour();
+        return;
+    }
+    showTourStep(tourStepIndex + 1);
+}
+
+function endTour() {
+    document.getElementById('tourOverlay').style.display = 'none';
+    window.removeEventListener('resize', repositionTourSpotlight);
+    window.removeEventListener('scroll', repositionTourSpotlight);
+    localStorage.setItem(TOUR_KEY, '1');
 }

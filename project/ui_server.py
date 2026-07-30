@@ -19,6 +19,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -133,6 +134,13 @@ ARENA_TRAIT_INTENSITY = 0.7
 # only the traits that have played before.
 ARENA_CANDIDATE_POOL_SIZE = 6
 ARENA_EXPLORATION_PROB = 0.15
+
+# XOR "raw" mechanic: with this probability, exactly one of the two sides
+# (never both, never neither) skips traits entirely and answers as a plain,
+# neutral assistant - a baseline for "does adding any personality trait at
+# all help?" rather than just "which traits work best." Which side (A or B)
+# goes raw is chosen with equal probability each time this triggers.
+ARENA_RAW_PROB = 0.15
 
 # After a vote, 1 in 5 rounds ask the user what made their pick better - a
 # lightweight, occasional prompt rather than one on every single vote (which
@@ -628,11 +636,24 @@ def _team_rating(traits: list[str], ratings: dict) -> float:
     return sum(values) / len(values) if values else glicko.DEFAULT_RATING
 
 
-def _select_arena_teams(available: list[str], ratings: dict) -> tuple[list[str], list[str]]:
+def _select_arena_teams(available: list[str], ratings: dict) -> tuple[list[str], list[str], Optional[str]]:
     """Pick this round's two trait teams (see ARENA_CANDIDATE_POOL_SIZE/
-    ARENA_EXPLORATION_PROB above for the reasoning)."""
+    ARENA_EXPLORATION_PROB/ARENA_RAW_PROB above for the reasoning).
+
+    Returns (traits_a, traits_b, emotion_option), where emotion_option is
+    'A' or 'B' naming which side carries traits when the raw/no-emotion XOR
+    mechanic triggers this round, or None when both sides are trait-bearing
+    as usual.
+    """
+    if available and random.random() < ARENA_RAW_PROB:
+        emotion_team = _weighted_random_team(available, ratings)
+        emotion_option = random.choice(('A', 'B'))
+        if emotion_option == 'A':
+            return emotion_team, [], emotion_option
+        return [], emotion_team, emotion_option
+
     if random.random() < ARENA_EXPLORATION_PROB:
-        return _weighted_random_team(available, ratings), _weighted_random_team(available, ratings)
+        return _weighted_random_team(available, ratings), _weighted_random_team(available, ratings), None
 
     best_pair = None
     best_gap = None
@@ -642,7 +663,7 @@ def _select_arena_teams(available: list[str], ratings: dict) -> tuple[list[str],
         gap = abs(_team_rating(team_a, ratings) - _team_rating(team_b, ratings))
         if best_gap is None or gap < best_gap:
             best_pair, best_gap = (team_a, team_b), gap
-    return best_pair
+    return best_pair[0], best_pair[1], None
 
 
 def _resolve_model_id(data: dict) -> str:
@@ -701,7 +722,7 @@ def create_arena_round():
 
         ratings = analytics_store.get_trait_ratings()
         available = AIAgent(name="Arena").list_available_traits()
-        traits_a, traits_b = _select_arena_teams(available, ratings)
+        traits_a, traits_b, emotion_option = _select_arena_teams(available, ratings)
         agent_a = _build_arena_agent("Arena Option A", traits_a)
         agent_b = _build_arena_agent("Arena Option B", traits_b)
 
@@ -712,6 +733,8 @@ def create_arena_round():
         quota_store.charge(ip, tokens_a + tokens_b)
 
         round_id = analytics_store.record_round(traits_a, reply_a, traits_b, reply_b)
+        if emotion_option is not None:
+            analytics_store.record_emotion_round(round_id, emotion_option)
 
         chats = get_session_chats()
         if chat_id in chats:

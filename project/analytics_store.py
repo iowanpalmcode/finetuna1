@@ -102,6 +102,12 @@ def init_db() -> None:
                         feedback_text TEXT NOT NULL,
                         created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
                     );
+
+                    CREATE TABLE IF NOT EXISTS emotion_ab_rounds (
+                        round_id       INTEGER PRIMARY KEY REFERENCES arena_rounds(round_id),
+                        emotion_option TEXT NOT NULL CHECK (emotion_option IN ('A', 'B')),
+                        created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
                     """
                 )
         _initialized = True
@@ -142,6 +148,26 @@ def record_round(traits_a: List[str], reply_a: str, traits_b: List[str], reply_b
                 )
 
         return round_id
+
+
+def record_emotion_round(round_id: int, emotion_option: str) -> None:
+    """
+    Mark a round as one where the XOR raw/no-emotion mechanic triggered:
+    exactly one option (A or B) was assigned traits and the other answered
+    with no traits at all. Called right after record_round, only when that
+    round's option pair came out of that mechanic (see
+    ui_server._select_arena_teams). Whether the emotion side ultimately won
+    is derived later from arena_rounds.voted_option - not duplicated here.
+    """
+    if emotion_option not in ("A", "B"):
+        raise ValueError("emotion_option must be 'A' or 'B'")
+
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO emotion_ab_rounds (round_id, emotion_option) VALUES (%s, %s)",
+                (round_id, emotion_option),
+            )
 
 
 def record_vote(round_id: int, option: str) -> bool:
@@ -244,6 +270,17 @@ def get_analytics_summary() -> Dict:
 
             cur.execute(
                 """
+                SELECT COUNT(*) AS decided,
+                       COUNT(*) FILTER (WHERE r.voted_option = e.emotion_option) AS emotion_wins
+                FROM emotion_ab_rounds e
+                JOIN arena_rounds r ON r.round_id = e.round_id
+                WHERE r.voted_option IS NOT NULL
+                """
+            )
+            emotion_row = cur.fetchone()
+
+            cur.execute(
+                """
                 SELECT o.traits_json, o.traits_key, o.response_length,
                        (o.option_label = r.voted_option) AS won
                 FROM arena_options o
@@ -324,6 +361,9 @@ def get_analytics_summary() -> Dict:
         if t["name"] in history
     }
 
+    emotion_decided = emotion_row["decided"]
+    emotion_wins = emotion_row["emotion_wins"]
+
     return {
         "total_rounds": total_rounds,
         "total_votes": total_votes,
@@ -335,4 +375,12 @@ def get_analytics_summary() -> Dict:
         "top_combos": combo_stats,
         "trait_history": trait_history,
         "min_sample_size": MIN_SAMPLE_SIZE,
+        # From the XOR raw/no-emotion mechanic (see ui_server.ARENA_RAW_PROB):
+        # among voted rounds where one side had traits and the other had none,
+        # how often the trait-bearing side won.
+        "emotion_vs_raw": {
+            "times_decided": emotion_decided,
+            "emotion_wins": emotion_wins,
+            "emotion_win_rate": (emotion_wins / emotion_decided) if emotion_decided else None,
+        },
     }

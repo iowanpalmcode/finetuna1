@@ -62,6 +62,7 @@ function renderStatTiles(summary) {
         { label: 'Total Votes', value: summary.total_votes.toLocaleString() },
         { label: 'Traits in Play', value: summary.distinct_traits_used.toLocaleString() },
         { label: 'Avg Reply Length', value: `${Math.round(summary.overall_avg_response_length)} chars` },
+        emotionVsRawTile(summary.emotion_vs_raw),
     ];
 
     const container = document.getElementById('statTiles');
@@ -71,6 +72,20 @@ function renderStatTiles(summary) {
             <div class="stat-tile-label">${tile.label}</div>
         </div>
     `).join('');
+}
+
+// From the XOR raw/no-emotion mechanic: some rounds pit a trait-bearing
+// reply against a plain, trait-free one. This is how often the
+// trait-bearing side won those specific rounds, out of how many were voted on.
+function emotionVsRawTile(emotionVsRaw) {
+    if (!emotionVsRaw || !emotionVsRaw.times_decided) {
+        return { label: 'Emotion vs. Raw Win Rate', value: 'N/A yet' };
+    }
+    const pct = Math.round(emotionVsRaw.emotion_win_rate * 100);
+    return {
+        label: `Emotion vs. Raw Win Rate (n=${emotionVsRaw.times_decided.toLocaleString()})`,
+        value: `${pct}%`,
+    };
 }
 
 // ----- Generic pagination for a bar-chart or table body -----
