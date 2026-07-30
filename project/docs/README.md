@@ -59,7 +59,7 @@ project/
 │   └── trait_interactions.py   # Interaction manager & definitions
 ├── examples/                   # Example implementations
 ├── main.py                     # Comprehensive demonstration
-└── README.md                   # This file
+└── docs/                       # Documentation (this file lives here)
 ```
 
 ## Quick Start

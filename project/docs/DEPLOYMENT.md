@@ -47,14 +47,14 @@ project/
 
 ### Documentation
 ```
-project/
+project/docs/
 ├── README.md                   (600+ lines) - Main documentation
 ├── SETUP.md                    (400+ lines) - Installation & troubleshooting
 ├── QUICKSTART.md               (400+ lines) - Getting started guide
 ├── UI_README.md                (500+ lines) - UI documentation
 ├── PROJECT_SUMMARY.md          (300+ lines) - Overview & statistics
-├── INDEX.md                    (300+ lines) - Navigation guide
-└── COMPLETION_REPORT.md        - Project completion status
+├── DOCUMENTATION_INDEX.md      (300+ lines) - Navigation guide
+└── INDEX.md                    (300+ lines) - Navigation guide
 ```
 
 ## Deployment Scenarios

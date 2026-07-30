@@ -84,8 +84,7 @@ project/
 │   ├── quick_start.py           # Quick start guide
 │   └── llm_integration_guide.py  # LLM integration patterns
 ├── main.py                       # Comprehensive demonstration
-├── README.md                     # Full documentation
-└── SETUP.md                      # This file
+└── docs/                         # Documentation (README.md, SETUP.md, ...)
 ```
 
 ## Quick Start

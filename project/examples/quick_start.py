@@ -331,7 +331,7 @@ def main():
     print("Examples completed!")
     print("="*70)
     print("\nFor the full demonstration with all features, run: python main.py")
-    print("For complete documentation, see: README.md\n")
+    print("For complete documentation, see: docs/README.md\n")
 
 
 if __name__ == "__main__":

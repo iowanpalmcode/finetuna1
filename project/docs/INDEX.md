@@ -6,11 +6,11 @@ Welcome! This is a **production-quality Python framework** for building AI agent
 ### 🎯 Start Here
 
 #### Quick Links
-- **Want to see it in action?** → Run [`main.py`](main.py)
+- **Want to see it in action?** → Run [`main.py`](../main.py)
 - **New to the framework?** → Read [`SETUP.md`](SETUP.md)
 - **Need complete documentation?** → See [`README.md`](README.md)
-- **Looking for code examples?** → Check [`examples/quick_start.py`](examples/quick_start.py)
-- **Want LLM integration?** → See [`examples/llm_integration_guide.py`](examples/llm_integration_guide.py)
+- **Looking for code examples?** → Check [`examples/quick_start.py`](../examples/quick_start.py)
+- **Want LLM integration?** → See [`examples/llm_integration_guide.py`](../examples/llm_integration_guide.py)
 
 ---
 
@@ -22,9 +22,9 @@ Welcome! This is a **production-quality Python framework** for building AI agent
 3. **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - What's included (10 min read)
 
 ### Learning by Doing
-1. **[main.py](main.py)** - Run comprehensive demonstration (shows all features)
-2. **[examples/quick_start.py](examples/quick_start.py)** - 10 practical examples
-3. **[examples/llm_integration_guide.py](examples/llm_integration_guide.py)** - LLM patterns
+1. **[main.py](../main.py)** - Run comprehensive demonstration (shows all features)
+2. **[examples/quick_start.py](../examples/quick_start.py)** - 10 practical examples
+3. **[examples/llm_integration_guide.py](../examples/llm_integration_guide.py)** - LLM patterns
 
 ---
 
@@ -49,7 +49,7 @@ project/
 │       ├── quick_start.py         # 10 quick examples
 │       └── llm_integration_guide.py # LLM integration patterns
 │
-└── Documentation
+└── docs/ (Documentation)
     ├── README.md                  # Complete reference
     ├── SETUP.md                   # Setup & installation
     ├── PROJECT_SUMMARY.md         # What's included
@@ -294,7 +294,7 @@ messages = LLMIntegrationHelper.build_openai_messages(agent, "User message")
 
 1. **First**: Run `python main.py` to see it in action (3 minutes)
 2. **Then**: Skim [`SETUP.md`](SETUP.md) quick start section (2 minutes)
-3. **Next**: Try examples from [`examples/quick_start.py`](examples/quick_start.py) (10 minutes)
+3. **Next**: Try examples from [`examples/quick_start.py`](../examples/quick_start.py) (10 minutes)
 4. **Finally**: Deep dive into [`README.md`](README.md) for complete reference (20 minutes)
 
 ---
@@ -325,8 +325,8 @@ messages = LLMIntegrationHelper.build_openai_messages(agent, "User message")
 
 - **Setup Issues?** → See [SETUP.md - Troubleshooting](SETUP.md#troubleshooting)
 - **API Questions?** → See [README.md - API Reference](README.md#api-reference)
-- **Integration Help?** → See [examples/llm_integration_guide.py](examples/llm_integration_guide.py)
-- **Code Examples?** → See [examples/quick_start.py](examples/quick_start.py)
+- **Integration Help?** → See [examples/llm_integration_guide.py](../examples/llm_integration_guide.py)
+- **Code Examples?** → See [examples/quick_start.py](../examples/quick_start.py)
 
 ---
 

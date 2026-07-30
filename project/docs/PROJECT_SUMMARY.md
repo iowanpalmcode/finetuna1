@@ -216,8 +216,7 @@ project/
 ├── agent.py                    # Main AIAgent class (350+ lines)
 ├── trait_manager.py            # Trait management (300+ lines)
 ├── main.py                     # 8 demonstrations (300+ lines)
-├── README.md                   # Full documentation (600+ lines)
-├── SETUP.md                    # Setup guide (400+ lines)
+├── docs/                       # Documentation (README.md, SETUP.md, ...)
 │
 ├── traits/                     # Personality traits
 │   ├── base_trait.py          # Abstract base class (150+ lines)
