@@ -2,3 +2,5 @@
 __pycache__/
 *.pyc
 project/data/
+COMPLETION_REPORT.md
+info.md
