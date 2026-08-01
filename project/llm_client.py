@@ -64,18 +64,25 @@ DEFAULT_MODEL_ID = "nemotron-3-nano"
 # clears up on an immediate retry - without this, every one of those blips
 # surfaced straight to the user as a bare failed chat request. Kept to just
 # one retry (2 attempts total): worst case is attempts * client timeout +
-# backoff = 2*30 + 1.5 = 61.5s, comfortably under gunicorn's request
-# timeout even with both Arena sides in flight - a 3rd attempt would push
-# that past what's safe (see _get_client_and_model's timeout comment).
+# backoff = 2*45 + 1.5 = 91.5s, still under gunicorn's request timeout (see
+# render.yaml) even with both Arena sides in flight - a 3rd attempt would
+# push that past what's safe (see _get_client_and_model's timeout comment).
 _MAX_RETRIES = 1
 _RETRY_BASE_DELAY_SECONDS = 1.5
 _RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 # Caps worst-case generation time by bounding output length - a runaway
 # verbose reply from a slower free-tier model was a real contributor to
-# requests blowing past gunicorn's timeout. Generous enough for a normal
-# chat reply; matches the ballpark quota_store already assumes per round.
-_MAX_REPLY_TOKENS = 700
+# requests blowing past gunicorn's timeout. Raised from the original 700:
+# that was tight enough that normal, non-runaway replies routinely hit the
+# cap and got cut off mid-sentence (finish_reason "length" looks identical
+# to a real, complete reply - nothing in the response flags it as
+# truncated), and reasoning models spend part of this same budget on
+# invisible "thinking" tokens before any visible content, so a low cap could
+# leave little or nothing for the actual answer. See _get_client_and_model's
+# timeout and render.yaml's gunicorn --timeout for the matching worst-case
+# math this number feeds into.
+_MAX_REPLY_TOKENS = 1536
 
 # In-memory cache for identical (system prompt, history, message) requests -
 # avoids burning free-tier rate limits and API latency on repeats. Keyed by a
@@ -171,8 +178,11 @@ def _get_client_and_model(needs_vision: bool = False, model_id: Optional[str] = 
     # --timeout in render.yaml. Blowing past that timeout is what used to
     # surface to users as a raw HTML "status 500" instead of the clean JSON
     # error these routes normally return - gunicorn kills the worker
-    # mid-request before Flask's own except blocks ever get to run.
-    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key, timeout=30.0, max_retries=0)
+    # mid-request before Flask's own except blocks ever get to run. 45s (up
+    # from 30s) to give the larger _MAX_REPLY_TOKENS cap enough room for a
+    # slower free-tier model to actually finish generating it rather than
+    # timing out before reaching a natural stopping point.
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key, timeout=45.0, max_retries=0)
     return client, model
 
 
