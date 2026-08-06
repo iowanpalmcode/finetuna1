@@ -5,7 +5,6 @@ Provides REST API and serves interactive UI for the personality trait system.
 
 from flask import Flask, render_template, request, jsonify, session
 from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 import base64
 import binascii
@@ -534,17 +533,15 @@ def chat_with_agent(agent_id):
         if not isinstance(message, str) or len(message) > MAX_PROMPT_LENGTH:
             return jsonify({'success': False, 'error': f'Message must be a string of at most {MAX_PROMPT_LENGTH} characters'}), 400
 
-        # Deliberately IP-based, not session-based like the rate limiter above -
-        # see quota_store's module docstring: a cookie is trivial to clear, so
-        # the cost-protection budget needs the sturdier (if coarser) IP as its
-        # key, even though request-rate limiting is now per-browser.
-        ip = get_remote_address()
-        if not quota_store.has_budget(ip):
+        # Same signed session-cookie uid the rate limiter above uses - see
+        # quota_store's module docstring for why this is per-browser, not per-IP.
+        uid = _get_or_create_session_uid()
+        if not quota_store.has_budget(uid):
             return jsonify({'success': False, 'error': 'Daily testing limit reached.', 'quota_exceeded': True}), 429
 
         agent = agents[agent_id]
         reply, tokens_charged = agent.generate_llm_reply(message, model_id=_resolve_model_id(data))
-        quota_store.charge(ip, tokens_charged)
+        quota_store.charge(uid, tokens_charged)
 
         profile = agent.get_behavioral_profile()
 
@@ -572,13 +569,13 @@ def regenerate_agent_reply(agent_id):
 
         data = request.json or {}
 
-        ip = get_remote_address()
-        if not quota_store.has_budget(ip):
+        uid = _get_or_create_session_uid()
+        if not quota_store.has_budget(uid):
             return jsonify({'success': False, 'error': 'Daily testing limit reached.', 'quota_exceeded': True}), 429
 
         agent = agents[agent_id]
         reply, tokens_charged = agent.regenerate_last_reply(model_id=_resolve_model_id(data))
-        quota_store.charge(ip, tokens_charged)
+        quota_store.charge(uid, tokens_charged)
 
         profile = agent.get_behavioral_profile()
 
@@ -716,8 +713,8 @@ def create_arena_round():
             except ImageValidationError as e:
                 return jsonify({'success': False, 'error': str(e)}), 400
 
-        ip = get_remote_address()
-        if not quota_store.has_budget(ip):
+        uid = _get_or_create_session_uid()
+        if not quota_store.has_budget(uid):
             return jsonify({'success': False, 'error': 'Daily testing limit reached.', 'quota_exceeded': True}), 429
 
         ratings = analytics_store.get_trait_ratings()
@@ -730,7 +727,7 @@ def create_arena_round():
         future_b = _arena_executor.submit(agent_b.generate_llm_reply, message, False, image_data_url, model_id)
         reply_a, tokens_a = future_a.result()
         reply_b, tokens_b = future_b.result()
-        quota_store.charge(ip, tokens_a + tokens_b)
+        quota_store.charge(uid, tokens_a + tokens_b)
 
         round_id = analytics_store.record_round(traits_a, reply_a, traits_b, reply_b)
         if emotion_option is not None:
@@ -859,9 +856,9 @@ _ESTIMATED_TOKENS_PER_ROUND = 900
 def get_quota():
     """This browser's daily token usage/remaining, for the Settings modal."""
     try:
-        ip = get_remote_address()
-        used = quota_store.used(ip)
-        remaining = quota_store.remaining(ip)
+        uid = _get_or_create_session_uid()
+        used = quota_store.used(uid)
+        remaining = quota_store.remaining(uid)
         return jsonify({
             'success': True,
             'used_tokens': used,
