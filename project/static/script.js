@@ -748,10 +748,10 @@ async function shareRound(roundEl, btn) {
         roundEl.dataset.shareToken = data.share_token;
         // Also add the share token to the round actions so it can be copied later
         const actions = roundEl.querySelector('.arena-round-actions');
-        // Add the round prompt for context but not to the share link (i.e. share link is just the token, but the prompt is shown in the copy message)
-        const promptEl = roundEl.querySelector('.arena-option-label');
-        const promptText = promptEl ? promptEl.textContent : '';
-        const shareLink = `${window.location.origin}/?share=${encodeURIComponent(data.share_token)}&prompt=${encodeURIComponent(promptText)}`;
+        const shareBtn = actions.querySelector('.arena-share-btn');
+        if (shareBtn) {
+            shareBtn.dataset.shareToken = data.share_token;
+        }
         data.share_url = shareLink;
         await copyTextToClipboard(data.share_url);
         showSuccess('Share link copied. Your friends can vote this same round.');
