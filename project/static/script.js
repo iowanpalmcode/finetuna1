@@ -733,41 +733,45 @@ async function shareRound(roundEl, btn) {
     btn.textContent = 'Sharing...';
 
     try {
-    const response = await fetch(`/api/arena/round/${roundId}/share`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: currentChatId })
-    });
+        const response = await fetch(`/api/arena/round/${roundId}/share`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: currentChatId })
+        });
 
-    const data = await parseJsonResponse(response);
+        const data = await parseJsonResponse(response);
 
-    if (!data.success) {
-        showError('Failed to create share link: ' + data.error);
-        return;
+        if (!data.success) {
+            showError('Failed to create share link: ' + data.error);
+            return;
+        }
+
+        roundEl.dataset.shareToken = data.share_token;
+
+        // Also add the share token to the round actions so it can be copied later
+        const actions = roundEl.querySelector('.arena-round-actions');
+        const shareBtn = actions.querySelector('.arena-share-btn');
+
+        if (shareBtn) {
+            shareBtn.dataset.shareToken = data.share_token;
+        }
+
+        // Get the prompt from the user message directly above this round
+        const turnEl = roundEl.closest('.chat-turn');
+        const promptBubble = turnEl?.querySelector('.chat-bubble-user');
+        const prompt = promptBubble?.textContent?.trim() || 'Round';
+
+        // Copy: "Should humans colonize Mars?: https://..."
+        data.share_url = `${prompt}: ${data.share_url}`;
+
+        await copyTextToClipboard(data.share_url);
+        showSuccess('Share link copied. Your friends can vote this same round.');
+    } catch (error) {
+        showError('Error sharing round: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
     }
-
-    roundEl.dataset.shareToken = data.share_token;
-
-    // Also add the share token to the round actions so it can be copied later
-    const actions = roundEl.querySelector('.arena-round-actions');
-    const shareBtn = actions.querySelector('.arena-share-btn');
-
-    if (shareBtn) {
-        shareBtn.dataset.shareToken = data.share_token;
-    }
-
-    // Copy the prompt + share link
-    const prompt = roundEl.dataset.prompt;
-    data.share_url = `${prompt}: ${data.share_url}`;
-
-    await copyTextToClipboard(data.share_url);
-    showSuccess('Share link copied. Your friends can vote this same round.');
-} catch (error) {
-    showError('Error sharing round: ' + error.message);
-} finally {
-    btn.disabled = false;
-    btn.textContent = originalLabel;
-}
 }
 
 async function copyTextToClipboard(text) {
