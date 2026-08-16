@@ -922,8 +922,8 @@ function setupSuggestions() {
 
     btn.textContent = PROMPT_SUGGESTIONS[0];
     setInterval(() => {
-        suggestionIndex = (suggestionIndex + 1) % PROMPT_SUGGESTIONS.length;
-        btn.textContent = PROMPT_SUGGESTIONS[suggestionIndex];
+        // suggestionindex becomes random
+        suggestionIndex = Math.floor(Math.random() * PROMPT_SUGGESTIONS.length);        btn.textContent = PROMPT_SUGGESTIONS[suggestionIndex];
     }, 3500);
 
     btn.addEventListener('click', () => {
