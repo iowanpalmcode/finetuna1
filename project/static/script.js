@@ -32,6 +32,48 @@ async function parseJsonResponse(response) {
 const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const PROMPT_SUGGESTIONS = [
+    "You accidentally send “I love you” to your teacher. What do you do?",
+    "Your friend says pineapple belongs on pizza. Respond.",
+    "You have $1,000 and 24 hours to spend it. What do you do?",
+    "Explain why you were late to school.",
+    "Convince me that pigeons are secretly intelligent.",
+    "What's the best way to learn a new language?",
+    'Write a short story about a robot who discovers music.',
+    "Explain quantum computing like I'm five.",
+    'Give me a recipe using only five ingredients.',
+    'What are three tips for staying productive while working from home?',
+    'Describe your ideal vacation destination.',
+    'Help me write a birthday message for a friend.',
+    "What's a fun fact about space that most people don't know?",
+    'Make the case: cats vs. dogs as pets.',
+    'How would you explain the internet to someone from the 1800s?',
+    'Suggest a beginner-friendly workout routine.',
+    "What's a creative way to say thank you?",
+    "What's the best way to handle a difficult conversation?",
+    "I failed an important test. What should I do?",
+    "Should I quit something I've worked on for two years?",
+    "I have to choose between two colleges. How should I decide?",
+    "I don't know what I want to do with my life. What should I do?",
+    "Is AI going to make programmers obsolete?",
+    "Is college worth it?",
+    "Should school start later?",
+    "Are grades actually important?",
+    "Is money more important than happiness?",
+    "Should humans colonize Mars?",
+    "Your best friend is dating someone you don't trust. What should you do?",
+    "Someone hasn't responded to your text for three days. What do you do?",
+    "Your friend asks you for brutally honest feedback. How do you respond?",
+    "You discover your friend lied to you. What do you do?",
+    "Someone takes credit for your work. How do you handle it?",
+    "You have one chance to become famous. What do you do?",
+    "Your best friend betrays you. What's your next move?",
+    "You wake up with $10 million in your bank account. What's the first thing you do?",
+    "You can delete one invention from human history. Which one?",
+    "You have 30 days to completely reinvent yourself. What's your plan?",
+    "You're the president for one day. What's the first law you pass?",
+    "You can know the exact date you will die, but nothing else. Would you find out?",
+    "You can instantly become world-class at one skill. Which skill do you choose?",
+    "You are given a time machine that can only travel once. Where and when do you go? You can ask your future self one question, and they must answer honestly. What do you ask?",
     "What's the best way to learn a new language?",
     'Write a short story about a robot who discovers music.',
     "Explain quantum computing like I'm five.",
@@ -55,6 +97,7 @@ let deleteConfirmStage = 0; // 0 = closed, 1 = first warning, 2 = typed confirma
 let pendingImage = null;   // { dataUrl, name } - session-only, never sent anywhere but the next round
 let suggestionIndex = 0;
 let pendingFeedbackRoundId = null; // round awaiting the "what made it better" popup, if any
+let activeSharedRoundToken = null;
 
 // Theme is already applied by theme.js (loaded synchronously in <head>,
 // before this file), so there's nothing to do here beyond wiring up events.
@@ -72,6 +115,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupSuggestions();
     setupImageHandlers();
     await initChats();
+    maybeOpenSharedRoundFromPage();
     maybeRunTour();
 });
 
@@ -131,6 +175,16 @@ function setupEventListeners() {
     document.getElementById('feedbackSubmitBtn').addEventListener('click', submitFeedback);
     document.getElementById('feedbackModal').addEventListener('click', (e) => {
         if (e.target.id === 'feedbackModal') closeFeedbackModal();
+    });
+
+    // Shared-round modal
+    document.getElementById('sharedRoundCloseBtn').addEventListener('click', closeSharedRoundModal);
+    document.getElementById('sharedRoundModal').addEventListener('click', (e) => {
+        if (e.target.id === 'sharedRoundModal') closeSharedRoundModal();
+    });
+    document.getElementById('sharedRoundMakeOwnBtn').addEventListener('click', () => {
+        closeSharedRoundModal();
+        if (!quotaExceeded) document.getElementById('chatInput').focus();
     });
 
     // Tour
@@ -229,7 +283,7 @@ async function switchToChat(chatId) {
 function emptyStateHTML() {
     return `
         <div class="chat-empty-state">
-            <div class="chat-empty-icon">⚔️</div>
+            <div class="chat-empty-icon">&gt;:-&lt;</div>
             <p>Send a message. Two AI replies with random personality traits will face off — pick the one you like better.</p>
         </div>
     `;
@@ -280,7 +334,7 @@ function renderChatList(chats) {
         del.type = 'button';
         del.className = 'chat-list-item-delete';
         del.title = 'Delete this chat';
-        del.textContent = '🗑️';
+        del.textContent = 'x_x';
         del.addEventListener('click', (e) => {
             e.stopPropagation();
             deleteSingleChat(chat.chat_id, chat.name);
@@ -493,6 +547,7 @@ function fillArenaRound(roundEl, data) {
     roundEl.dataset.roundId = data.round_id;
     fillArenaOption(roundEl, 'A', data.option_a.reply, data.option_a.traits);
     fillArenaOption(roundEl, 'B', data.option_b.reply, data.option_b.traits);
+    appendRoundActions(roundEl);
 
     roundEl.querySelectorAll('.arena-vote-btn').forEach(btn => {
         btn.addEventListener('click', () => castVote(roundEl, btn.dataset.option));
@@ -531,17 +586,19 @@ function renderHistoricalRound(round, turnEl) {
     const roundEl = document.createElement('div');
     roundEl.className = 'arena-round';
     roundEl.dataset.roundId = round.round_id;
+    if (round.share_token) roundEl.dataset.shareToken = round.share_token;
     roundEl.innerHTML = `
         <div class="arena-options-grid">
             ${arenaOptionPlaceholderHTML('A')}
             ${arenaOptionPlaceholderHTML('B')}
         </div>
-        ${round.had_image ? '<p class="arena-round-note">📎 An image was attached to this round.</p>' : ''}
+        ${round.had_image ? '<p class="arena-round-note">(:-]) An image was attached to this round.</p>' : ''}
     `;
     turnEl.appendChild(roundEl);
 
     fillArenaOption(roundEl, 'A', round.option_a.reply, round.option_a.traits);
     fillArenaOption(roundEl, 'B', round.option_b.reply, round.option_b.traits);
+    appendRoundActions(roundEl);
 
     if (round.voted_option) {
         revealArenaResult(roundEl, round.voted_option);
@@ -644,6 +701,178 @@ function revealArenaResult(roundEl, winningOption) {
             ? traits.map(name => `<span class="trait-chip">${name}</span>`).join('')
             : '<span class="trait-chip trait-chip-empty">No traits (neutral)</span>';
     });
+}
+
+function appendRoundActions(roundEl) {
+    if (roundEl.querySelector('.arena-round-actions')) return;
+
+    const actions = document.createElement('div');
+    actions.className = 'arena-round-actions';
+
+    const shareBtn = document.createElement('button');
+    shareBtn.type = 'button';
+    shareBtn.className = 'btn btn-text arena-share-btn';
+    shareBtn.textContent = '(^_^) Share this round';
+    shareBtn.addEventListener('click', () => shareRound(roundEl, shareBtn));
+
+    actions.appendChild(shareBtn);
+    roundEl.appendChild(actions);
+}
+
+async function shareRound(roundEl, btn) {
+    if (!currentChatId) {
+        showError('Open a chat before sharing a round.');
+        return;
+    }
+
+    const roundId = roundEl.dataset.roundId;
+    if (!roundId) return;
+
+    btn.disabled = true;
+    const originalLabel = btn.textContent;
+    btn.textContent = 'Sharing...';
+
+    try {
+        const response = await fetch(`/api/arena/round/${roundId}/share`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: currentChatId })
+        });
+        const data = await parseJsonResponse(response);
+
+        if (!data.success) {
+            showError('Failed to create share link: ' + data.error);
+            return;
+        }
+
+        roundEl.dataset.shareToken = data.share_token;
+        await copyTextToClipboard(data.share_url);
+        showSuccess('Share link copied. Your friends can vote this same round.');
+    } catch (error) {
+        showError('Error sharing round: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+    }
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const input = document.createElement('input');
+    input.value = text;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    input.remove();
+}
+
+function maybeOpenSharedRoundFromPage() {
+    const token = document.body.dataset.sharedRoundToken;
+    if (!token) return;
+    openSharedRoundModal(token);
+}
+
+async function openSharedRoundModal(shareToken) {
+    activeSharedRoundToken = shareToken;
+    document.getElementById('sharedRoundModal').style.display = 'flex';
+    document.getElementById('sharedRoundPrompt').textContent = 'Loading shared round...';
+    document.getElementById('sharedRoundMeta').textContent = '';
+    document.getElementById('sharedRoundNudge').textContent = '';
+    document.getElementById('sharedRoundOptions').innerHTML = '';
+
+    try {
+        const response = await fetch(`/api/shared-rounds/${encodeURIComponent(shareToken)}`);
+        const data = await parseJsonResponse(response);
+        if (!data.success) {
+            showError('Could not load shared round: ' + data.error);
+            closeSharedRoundModal();
+            return;
+        }
+        renderSharedRoundModal(data.round);
+    } catch (error) {
+        showError('Error loading shared round: ' + error.message);
+        closeSharedRoundModal();
+    }
+}
+
+function renderSharedRoundModal(round) {
+    document.getElementById('sharedRoundPrompt').textContent = `Prompt: ${round.prompt}`;
+    document.getElementById('sharedRoundMeta').textContent =
+        `Votes so far: ${round.total_votes} (A: ${round.option_a.votes}, B: ${round.option_b.votes})`;
+
+    const optionsEl = document.getElementById('sharedRoundOptions');
+    optionsEl.innerHTML = '';
+
+    [['A', round.option_a], ['B', round.option_b]].forEach(([label, option]) => {
+        const card = document.createElement('div');
+        card.className = 'shared-round-option';
+        if (round.viewer_vote === label) card.classList.add('is-winner');
+
+        card.innerHTML = `
+            <div class="arena-option-label">Option ${label}</div>
+            <div class="arena-option-body chat-bubble chat-bubble-assistant">${renderMarkdown(option.reply)}</div>
+            <div class="shared-round-vote-row">
+                <button type="button" class="btn btn-primary shared-round-vote-btn" data-option="${label}">Vote for Option ${label}</button>
+                <span class="settings-hint">${option.votes} vote${option.votes === 1 ? '' : 's'}</span>
+            </div>
+            <div class="arena-option-traits">${renderTraitChips(option.traits)}</div>
+        `;
+
+        const voteBtn = card.querySelector('.shared-round-vote-btn');
+        voteBtn.disabled = !!round.viewer_vote;
+        voteBtn.addEventListener('click', () => castSharedRoundVote(label));
+
+        optionsEl.appendChild(card);
+    });
+
+    const nudgeEl = document.getElementById('sharedRoundNudge');
+    if (round.viewer_vote) {
+        nudgeEl.textContent = 'Vote captured. Nice. Now make your own round below.';
+    } else {
+        nudgeEl.textContent = 'Pick your favorite reply, then create your own round.';
+    }
+}
+
+async function castSharedRoundVote(option) {
+    if (!activeSharedRoundToken) return;
+
+    const buttons = document.querySelectorAll('.shared-round-vote-btn');
+    buttons.forEach(btn => { btn.disabled = true; });
+
+    try {
+        const response = await fetch(`/api/shared-rounds/${encodeURIComponent(activeSharedRoundToken)}/vote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ option })
+        });
+        const data = await parseJsonResponse(response);
+        if (!data.success) {
+            showError('Failed to submit shared vote: ' + data.error);
+            buttons.forEach(btn => { btn.disabled = false; });
+            return;
+        }
+        renderSharedRoundModal(data.round);
+        showSuccess(data.already_voted ? 'You already voted on this shared round.' : 'Vote recorded. Now make your own round.');
+    } catch (error) {
+        showError('Error submitting shared vote: ' + error.message);
+        buttons.forEach(btn => { btn.disabled = false; });
+    }
+}
+
+function closeSharedRoundModal() {
+    activeSharedRoundToken = null;
+    document.getElementById('sharedRoundModal').style.display = 'none';
+}
+
+function renderTraitChips(traits) {
+    if (!Array.isArray(traits) || traits.length === 0) {
+        return '<span class="trait-chip trait-chip-empty">No traits (neutral)</span>';
+    }
+    return traits.map(name => `<span class="trait-chip">${name}</span>`).join('');
 }
 
 // ----- Auto-minimize past turns (keeps the window from filling up as more

@@ -418,7 +418,7 @@ function renderAgentTraits(traits) {
         traitEl.className = 'agent-trait';
 
         const traitObj = availableTraits.find(t => t.name === trait.name);
-        const icon = traitObj ? traitObj.icon : '✨';
+        const icon = traitObj ? traitObj.icon : ':-)';
         const pct = Math.round(trait.intensity * 100);
 
         traitEl.innerHTML = `
@@ -583,7 +583,7 @@ async function generateResponse() {
     
     try {
         document.getElementById('generateBtn').disabled = true;
-        document.getElementById('generateBtn').textContent = '⏳ Generating...';
+        document.getElementById('generateBtn').textContent = '... Generating...';
         
         const response = await fetch(`/api/agents/${currentAgentId}/generate`, {
             method: 'POST',
@@ -602,7 +602,7 @@ async function generateResponse() {
         showError('Error generating response: ' + error.message);
     } finally {
         document.getElementById('generateBtn').disabled = false;
-        document.getElementById('generateBtn').textContent = '✨ Generate Personality Response';
+        document.getElementById('generateBtn').textContent = '(^-^) Generate Personality Response';
     }
 }
 
@@ -616,7 +616,7 @@ function displayOutput(data) {
     
     data.traits.forEach(trait => {
         const traitObj = availableTraits.find(t => t.name === trait.name);
-        const icon = traitObj ? traitObj.icon : '✨';
+        const icon = traitObj ? traitObj.icon : ':-)';
         
         const traitEl = document.createElement('div');
         traitEl.className = 'trait-display';

@@ -8,17 +8,18 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body data-shared-round-token="{{ shared_round_token }}">
     <div class="app">
         <header class="app-header">
             <h1 id="appTitle">🎭 AIMotional</h1>
             <div class="header-actions">
-                <a href="{{ url_for('classic') }}" class="btn-icon" title="Switch to the classic drag-and-drop builder">🕹️ Classic</a>
-                <a href="{{ url_for('analytics_page') }}" id="analyticsNavLink" class="btn-icon" title="See what traits win the most">📊 Analytics</a>
+                <a href="{{ url_for('classic') }}" class="btn-icon" title="Switch to the classic drag-and-drop builder">(o_o) Classic</a>
+                <a href="{{ url_for('analytics_page') }}" id="analyticsNavLink" class="btn-icon" title="See what traits win the most">(^_^) Analytics</a>
+                <a href="{{ url_for('bulletin_page') }}" class="btn-icon" title="Top voted shared rounds today">(._.) Bulletin</a>
                 <button type="button" id="newChatBtn" class="btn-icon" title="Start a new chat">+ New</button>
 
                 <div class="chat-list-wrap">
-                    <button type="button" id="chatListToggle" class="btn-icon" title="Your chats">💬 Chats ▾</button>
+                    <button type="button" id="chatListToggle" class="btn-icon" title="Your chats">:-) Chats ▾</button>
                     <div id="chatListPanel" class="chat-list-panel" style="display: none;">
                         <div id="chatListItems" class="chat-list-items">
                             <p class="chat-list-empty">No chats yet</p>
@@ -27,7 +28,7 @@
                     </div>
                 </div>
 
-                <button type="button" id="settingsBtn" class="btn-icon" title="Settings">⚙️ Settings</button>
+                <button type="button" id="settingsBtn" class="btn-icon" title="Settings">[-] Settings</button>
             </div>
         </header>
 
@@ -35,7 +36,7 @@
             <section class="chat-column">
                 <div id="chatMessages" class="chat-messages">
                     <div class="chat-empty-state">
-                        <div class="chat-empty-icon">⚔️</div>
+                        <div class="chat-empty-icon">>:-&lt;</div>
                         <p>Send a message. Two AI replies with random personality traits will face off — pick the one you like better.</p>
                     </div>
                 </div>
@@ -47,7 +48,7 @@
                 </div>
 
                 <form id="chatForm" class="chat-input-row">
-                    <button type="button" id="attachImageBtn" class="btn-icon attach-btn" title="Attach an image (uses more of your daily limit)">📎</button>
+                    <button type="button" id="attachImageBtn" class="btn-icon attach-btn" title="Attach an image (uses more of your daily limit)">(:-])</button>
                     <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;">
 
                     <div class="chat-input-wrap">
@@ -67,6 +68,8 @@
                 <a href="{{ url_for('about') }}">About</a>
                 &nbsp;·&nbsp;
                 <a href="{{ url_for('analytics_page') }}">Analytics</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('bulletin_page') }}">Bulletin</a>
                 &nbsp;·&nbsp;
                 <a href="{{ url_for('terms') }}">Terms of Service</a>
                 &nbsp;·&nbsp;
@@ -88,12 +91,12 @@
                 <div class="settings-section">
                     <h3>Theme</h3>
                     <div class="theme-options" id="themeOptions">
-                        <label><input type="radio" name="theme" value="light"> ☀️ Light</label>
-                        <label><input type="radio" name="theme" value="dark"> 🌙 Dark</label>
-                        <label><input type="radio" name="theme" value="system"> 🖥️ System</label>
-                        <label><input type="radio" name="theme" value="solarized"> 🟤 Solarized</label>
-                        <label><input type="radio" name="theme" value="midnight"> 💜 Midnight</label>
-                        <label><input type="radio" name="theme" value="forest"> 🌲 Forest</label>
+                        <label><input type="radio" name="theme" value="light"> :-) Light</label>
+                        <label><input type="radio" name="theme" value="dark"> :-| Dark</label>
+                        <label><input type="radio" name="theme" value="system"> :-? System</label>
+                        <label><input type="radio" name="theme" value="solarized"> :-o Solarized</label>
+                        <label><input type="radio" name="theme" value="midnight"> :-3 Midnight</label>
+                        <label><input type="radio" name="theme" value="forest"> :^] Forest</label>
                     </div>
                     <p class="settings-hint">Your theme applies across the main app, analytics, and the classic builder.</p>
                 </div>
@@ -164,6 +167,24 @@
             <div class="modal-actions">
                 <button type="button" id="feedbackSkipBtn" class="btn btn-text">Skip</button>
                 <button type="button" id="feedbackSubmitBtn" class="btn btn-primary">Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sharedRoundModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-box shared-round-modal-box">
+            <div class="modal-header">
+                <h2>Shared Round</h2>
+                <button type="button" id="sharedRoundCloseBtn" class="modal-close" title="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="sharedRoundPrompt" class="shared-round-prompt"></p>
+                <p id="sharedRoundMeta" class="settings-hint"></p>
+                <div id="sharedRoundOptions" class="shared-round-options"></div>
+                <p id="sharedRoundNudge" class="shared-round-nudge"></p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="sharedRoundMakeOwnBtn" class="btn btn-primary">Make Your Own Round</button>
             </div>
         </div>
     </div>

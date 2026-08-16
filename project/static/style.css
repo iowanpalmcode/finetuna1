@@ -1593,6 +1593,59 @@ body {
     align-self: flex-start;
 }
 
+.arena-round-actions {
+    margin-top: 10px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.arena-share-btn {
+    border: 1px solid var(--border-input);
+}
+
+.shared-round-modal-box {
+    max-width: 860px;
+}
+
+.shared-round-prompt {
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.shared-round-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+@media (max-width: 760px) {
+    .shared-round-options {
+        grid-template-columns: 1fr;
+    }
+}
+
+.shared-round-option {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid var(--border-panel);
+    border-radius: 12px;
+    padding: 12px;
+    background: var(--bg-panel);
+}
+
+.shared-round-vote-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.shared-round-nudge {
+    margin-top: 12px;
+    color: var(--text-secondary);
+}
+
 .arena-option.is-winner {
     border-color: var(--accent);
     box-shadow: 0 0 0 1px var(--accent);
@@ -1929,6 +1982,57 @@ body {
 .analytics-main .section {
     max-width: 900px;
     margin: 0 auto;
+}
+
+.bulletin-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.bulletin-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.bulletin-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid var(--border-panel);
+    border-radius: 12px;
+    background: var(--bg-panel);
+}
+
+.bulletin-rank {
+    width: 56px;
+    text-align: center;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.bulletin-body h3 {
+    margin: 0;
+    font-size: 1em;
+}
+
+.bulletin-open-btn {
+    white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+    .bulletin-item {
+        grid-template-columns: 1fr;
+        align-items: flex-start;
+    }
+
+    .bulletin-rank {
+        width: auto;
+        text-align: left;
+    }
 }
 
 .analytics-status {

@@ -3,7 +3,7 @@ Web UI Server for AI Agent Framework
 Provides REST API and serves interactive UI for the personality trait system.
 """
 
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, url_for
 from flask_limiter import Limiter
 from dotenv import load_dotenv
 import base64
@@ -235,7 +235,13 @@ def set_security_headers(response):
 @app.route('/')
 def index():
     """Serve the main UI page."""
-    return render_template('index.html')
+    return render_template('index.html', shared_round_token='')
+
+
+@app.route('/shared/<share_token>')
+def shared_round_page(share_token):
+    """Open the Arena with a shared round pre-loaded for voting."""
+    return render_template('index.html', shared_round_token=share_token)
 
 
 @app.route('/classic')
@@ -274,6 +280,12 @@ def traits_guide():
 def analytics_page():
     """Serve the public Arena analytics page."""
     return render_template('analytics.html')
+
+
+@app.route('/bulletin')
+def bulletin_page():
+    """Serve the daily top-voted shared rounds board."""
+    return render_template('bulletin.html')
 
 
 _traits_cache = None
@@ -743,6 +755,7 @@ def create_arena_round():
                 'option_b': {'reply': reply_b, 'traits': traits_b},
                 'voted_option': None,
                 'had_image': image_data_url is not None,
+                'share_token': None,
             })
             if len(chat['rounds']) > MAX_ROUNDS_PER_CHAT:
                 chat['rounds'].pop(0)
@@ -808,6 +821,94 @@ def submit_arena_feedback(round_id):
             return jsonify({'success': False, 'error': 'Round not found, not yet voted on, or already has feedback'}), 409
 
         return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/arena/round/<int:round_id>/share', methods=['POST'])
+@limiter.limit("20 per minute")
+def share_arena_round(round_id):
+    """Create (or return) a public share link for a round in this session chat."""
+    try:
+        data = request.json or {}
+        chat_id = data.get('chat_id')
+        if not chat_id:
+            return jsonify({'success': False, 'error': 'chat_id is required'}), 400
+
+        chats = get_session_chats()
+        _, round_record = _find_chat_and_round(chats, chat_id, round_id)
+        if round_record is None:
+            return jsonify({'success': False, 'error': 'Round not found in this chat'}), 404
+
+        share_token = round_record.get('share_token')
+        if not share_token:
+            share_token = analytics_store.create_shared_round(
+                source_round_id=round_id,
+                prompt_text=round_record['message'],
+                option_a_reply=round_record['option_a']['reply'],
+                option_b_reply=round_record['option_b']['reply'],
+                option_a_traits=round_record['option_a']['traits'],
+                option_b_traits=round_record['option_b']['traits'],
+            )
+            round_record['share_token'] = share_token
+
+        share_url = url_for('shared_round_page', share_token=share_token, _external=True)
+        return jsonify({'success': True, 'share_token': share_token, 'share_url': share_url})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/shared-rounds/<share_token>', methods=['GET'])
+def get_shared_round(share_token):
+    """Return a shared round and live vote totals."""
+    try:
+        round_data = analytics_store.get_shared_round(share_token, voter_uid=_get_or_create_session_uid())
+        if not round_data:
+            return jsonify({'success': False, 'error': 'Shared round not found'}), 404
+        return jsonify({'success': True, 'round': round_data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/shared-rounds/<share_token>/vote', methods=['POST'])
+@limiter.limit("60 per minute")
+def vote_shared_round(share_token):
+    """Record this browser's vote for a shared round (one vote per browser)."""
+    try:
+        data = request.json or {}
+        option = data.get('option')
+        if option not in ('A', 'B'):
+            return jsonify({'success': False, 'error': "option must be 'A' or 'B'"}), 400
+
+        status = analytics_store.record_shared_round_vote(share_token, option, _get_or_create_session_uid())
+        if status == 'not_found':
+            return jsonify({'success': False, 'error': 'Shared round not found'}), 404
+
+        round_data = analytics_store.get_shared_round(share_token, voter_uid=_get_or_create_session_uid())
+        if not round_data:
+            return jsonify({'success': False, 'error': 'Shared round not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'already_voted': status == 'already_voted',
+            'round': round_data,
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/bulletin/today', methods=['GET'])
+def get_today_bulletin():
+    """Top shared rounds by votes cast today."""
+    try:
+        limit_raw = request.args.get('limit', '10')
+        try:
+            limit = int(limit_raw)
+        except ValueError:
+            return jsonify({'success': False, 'error': 'limit must be an integer'}), 400
+
+        rows = analytics_store.list_top_shared_rounds_today(limit=limit)
+        return jsonify({'success': True, 'rounds': rows})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
@@ -980,81 +1081,24 @@ def clear_agents():
 
 
 def get_trait_emoji(trait_name: str) -> str:
-    """Get emoji representation for a trait."""
-    emoji_map = {
-        # Original 10 traits
-        'Smart': '🧠',
-        'Creative': '🎨',
-        'Curious': '🔍',
-        'Efficient': '⚡',
-        'Happy': '😊',
-        'Sad': '😢',
-        'Lazy': '😴',
-        'Analytical': '📊',
-        'RiskTaking': '🎲',
-        'Empathetic': '❤️',
-        # New 28 traits
-        'Introverted': '🤐',
-        'Extroverted': '🎉',
-        'Patient': '⏳',
-        'Impatient': '⚡',
-        'Confident': '💪',
-        'Humble': '🙏',
-        'Serious': '😐',
-        'Playful': '😄',
-        'Logical': '🧮',
-        'Intuitive': '🎯',
-        'Organized': '📋',
-        'Chaotic': '🌪️',
-        'Cautious': '🛡️',
-        'Aggressive': '👊',
-        'Innovative': '💡',
-        'Traditional': '🏛️',
-        'Pragmatic': '🔧',
-        'Idealistic': '🌟',
-        'Witty': '😏',
-        'Sincere': '💯',
-        'Generous': '🎁',
-        'Selfish': '💸',
-        'Trusting': '🤝',
-        'Skeptical': '🤨',
-        'Calm': '🧘',
-        'Anxious': '😰',
-        'Perfectionist': '💎',
-        'Apathetic': '😒',
-        # New 30 traits - added for full A-Z coverage in the trait panel
-        'Bold': '🦁',
-        'Bubbly': '🫧',
-        'Daring': '🤺',
-        'Determined': '🔥',
-        'Friendly': '🤗',
-        'Focused': '🔬',
-        'Grateful': '🍀',
-        'Jovial': '😆',
-        'Jealous': '😤',
-        'Kind': '💚',
-        'Keen': '👀',
-        'Meticulous': '🧵',
-        'Modest': '🙈',
-        'Nostalgic': '📼',
-        'Nurturing': '🌱',
-        'Observant': '🔭',
-        'Quirky': '🤪',
-        'Quiet': '🤫',
-        'Resilient': '🌳',
-        'Understanding': '🫂',
-        'Upbeat': '🎶',
-        'Vibrant': '🌈',
-        'Vigilant': '🕵️',
-        'Warm': '☀️',
-        'Xenial': '🏡',
-        'Xenophilic': '🌍',
-        'Yielding': '🕊️',
-        'Youthful': '🎈',
-        'Zealous': '🙌',
-        'Zany': '🤹',
+    """Get a compact ASCII emoticon/label for a trait."""
+    icon_map = {
+        'Happy': ':-)',
+        'Sad': ':-(',
+        'Confident': 'B-)',
+        'Calm': ':-|',
+        'Anxious': ':-S',
+        'Witty': ';-)',
+        'Skeptical': ':-/',
+        'Playful': ':-P',
+        'Serious': ':-I',
+        'Jealous': '>:-(',
+        'Aggressive': '>:-|',
+        'Kind': '<3',
     }
-    return emoji_map.get(trait_name, '✨')
+    if trait_name in icon_map:
+        return icon_map[trait_name]
+    return f"({trait_name[:2].upper()})"
 
 
 if __name__ == '__main__':
@@ -1065,8 +1109,8 @@ if __name__ == '__main__':
     print("\n" + "="*70)
     print("AI Agent Framework - Web UI Server")
     print("="*70)
-    print("\n🚀 Starting server...")
-    print("📱 Open your browser and go to: http://localhost:5000")
+    print("\n(^_^) Starting server...")
+    print("Open your browser and go to: http://localhost:5000")
     print("\nPress Ctrl+C to stop the server.\n")
     print("="*70 + "\n")
 

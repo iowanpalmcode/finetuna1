@@ -14,7 +14,7 @@
             <div class="header-content">
                 <h1 id="classicTitle">🎭🎭 AIMotional</h1>
                 <p>Tap, click, or drag traits to create unique agent personalities</p>
-                <p class="classic-nav"><a href="{{ url_for('index') }}">💬 Try the new chat experience →</a></p>
+                <p class="classic-nav"><a href="{{ url_for('index') }}">:-) Try the new chat experience →</a></p>
             </div>
         </header>
 
@@ -26,7 +26,7 @@
                     <button type="button" id="toggleTraitsBtn" class="btn-collapse" title="Collapse">▾</button>
                 </div>
                 <p class="subtitle">Tap or click a trait to add it - or drag it in on desktop</p>
-                <input type="text" id="traitSearch" class="trait-search-input" placeholder="🔍 Search emotions or traits...">
+                <input type="text" id="traitSearch" class="trait-search-input" placeholder=":-) Search emotions or traits...">
                 <div id="favoritesBar" class="favorites-bar" style="display: none;"></div>
                 <div id="traitsContainer" class="traits-list">
                     <div class="loading">Loading traits...</div>
@@ -48,7 +48,7 @@
                             <select id="pastAgentsSelect" class="past-agents-select">
                                 <option value="">-- Select a past agent --</option>
                             </select>
-                            <button type="button" id="deleteAgentBtn" class="btn-icon" title="Delete selected agent">🗑️</button>
+                            <button type="button" id="deleteAgentBtn" class="btn-icon" title="Delete selected agent">x_x</button>
                             <button type="button" id="clearAgentsBtn" class="btn-icon" title="Delete all agents">Clear All</button>
                         </div>
                     </div>
@@ -56,7 +56,7 @@
                     <!-- Drop Zone for Traits -->
                     <div class="drop-zone" id="dropZone">
                         <div class="drop-zone-placeholder">
-                            <div class="drop-zone-icon">📥</div>
+                            <div class="drop-zone-icon">v_v</div>
                             <div class="drop-zone-text">Drag traits here</div>
                             <div class="drop-zone-subtext">Drop emotions to add them to your agent</div>
                         </div>
@@ -80,11 +80,11 @@
                                   rows="3"></textarea>
                     </div>
                     <div class="prompt-suggestion" id="promptSuggestion">
-                        <span class="prompt-suggestion-label">💡 Try:</span>
+                        <span class="prompt-suggestion-label">(^_^) Try:</span>
                         <button type="button" id="suggestionChip" class="suggestion-chip"></button>
                     </div>
                     <button id="generateBtn" class="btn btn-success" disabled>
-                        ✨ Generate Personality Response
+                        (^-^) Generate Personality Response
                     </button>
                 </div>
 
@@ -118,6 +118,8 @@
                 <a href="{{ url_for('about') }}">About</a>
                 &nbsp;·&nbsp;
                 <a href="{{ url_for('analytics_page') }}">Analytics</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('bulletin_page') }}">Bulletin</a>
                 &nbsp;·&nbsp;
                 <a href="{{ url_for('terms') }}">Terms of Service</a>
                 &nbsp;·&nbsp;

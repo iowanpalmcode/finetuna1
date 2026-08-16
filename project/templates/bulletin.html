@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Bulletin - AIMotional</title>
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1>(._.) Daily Bulletin</h1>
+                <p>Top 10 most-voted shared rounds today. Open one and vote in a popup.</p>
+            </div>
+        </header>
+
+        <main class="main legal-main">
+            <section class="section bulletin-section">
+                <p><a href="{{ url_for('index') }}">&larr; Back to the Arena</a></p>
+                <p class="settings-hint">Ranked by votes cast today (UTC day).</p>
+
+                <div id="bulletinError" class="analytics-status" style="display: none;"></div>
+                <div id="bulletinEmpty" class="analytics-status" style="display: none;">
+                    No shared rounds have been voted on today yet.
+                </div>
+
+                <div id="bulletinList" class="bulletin-list"></div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>AI Agent Framework with Modular Personality System</p>
+            <p class="footer-links">
+                <a href="{{ url_for('index') }}">Home</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('analytics_page') }}">Analytics</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('about') }}">About</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('terms') }}">Terms of Service</a>
+                &nbsp;·&nbsp;
+                <a href="{{ url_for('privacy') }}">Privacy Policy</a>
+            </p>
+        </footer>
+    </div>
+
+    <div id="bulletinVoteModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-box shared-round-modal-box">
+            <div class="modal-header">
+                <h2>Vote This Round</h2>
+                <button type="button" id="bulletinVoteCloseBtn" class="modal-close" title="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="bulletinVotePrompt" class="shared-round-prompt"></p>
+                <p id="bulletinVoteMeta" class="settings-hint"></p>
+                <div id="bulletinVoteOptions" class="shared-round-options"></div>
+                <p id="bulletinVoteNudge" class="shared-round-nudge"></p>
+            </div>
+            <div class="modal-actions">
+                <a href="{{ url_for('index') }}" class="btn btn-primary">Make Your Own Round</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='bulletin.js') }}"></script>
+</body>
+</html>

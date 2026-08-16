@@ -11,9 +11,10 @@ or session/account identifiers. See templates/privacy.html for the disclosure.
 
 import json
 import os
+import secrets
 import threading
 from contextlib import contextmanager
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import psycopg2
 import psycopg2.extras
@@ -32,6 +33,7 @@ MIN_SAMPLE_SIZE = 3
 TRAIT_HISTORY_LIMIT = 10
 
 MAX_FEEDBACK_LENGTH = 1000
+SHARE_TOKEN_BYTES = 6
 
 _init_lock = threading.Lock()
 _initialized = False
@@ -108,6 +110,32 @@ def init_db() -> None:
                         emotion_option TEXT NOT NULL CHECK (emotion_option IN ('A', 'B')),
                         created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
                     );
+
+                    CREATE TABLE IF NOT EXISTS shared_rounds (
+                        id                    SERIAL PRIMARY KEY,
+                        share_token           TEXT NOT NULL UNIQUE,
+                        source_round_id       INTEGER REFERENCES arena_rounds(round_id),
+                        prompt_text           TEXT NOT NULL,
+                        option_a_reply        TEXT NOT NULL,
+                        option_b_reply        TEXT NOT NULL,
+                        option_a_traits_json  TEXT NOT NULL,
+                        option_b_traits_json  TEXT NOT NULL,
+                        created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
+
+                    CREATE TABLE IF NOT EXISTS shared_round_votes (
+                        id            SERIAL PRIMARY KEY,
+                        share_token   TEXT NOT NULL REFERENCES shared_rounds(share_token) ON DELETE CASCADE,
+                        voter_uid     TEXT NOT NULL,
+                        voted_option  TEXT NOT NULL CHECK (voted_option IN ('A', 'B')),
+                        created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        UNIQUE (share_token, voter_uid)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS idx_shared_round_votes_created_at
+                        ON shared_round_votes(created_at);
+                    CREATE INDEX IF NOT EXISTS idx_shared_round_votes_share_token
+                        ON shared_round_votes(share_token);
                     """
                 )
         _initialized = True
@@ -210,6 +238,189 @@ def record_feedback(round_id: int, feedback_text: str) -> bool:
                 (feedback_text, round_id),
             )
             return cur.rowcount > 0
+
+
+def _new_share_token() -> str:
+    return secrets.token_urlsafe(SHARE_TOKEN_BYTES).rstrip('=')
+
+
+def create_shared_round(
+    source_round_id: Optional[int],
+    prompt_text: str,
+    option_a_reply: str,
+    option_b_reply: str,
+    option_a_traits: List[str],
+    option_b_traits: List[str],
+) -> str:
+    """Persist an explicitly shared round and return its public token."""
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            for _ in range(8):
+                token = _new_share_token()
+                cur.execute(
+                    """
+                    INSERT INTO shared_rounds (
+                        share_token,
+                        source_round_id,
+                        prompt_text,
+                        option_a_reply,
+                        option_b_reply,
+                        option_a_traits_json,
+                        option_b_traits_json
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (share_token) DO NOTHING
+                    RETURNING share_token
+                    """,
+                    (
+                        token,
+                        source_round_id,
+                        prompt_text,
+                        option_a_reply,
+                        option_b_reply,
+                        json.dumps(option_a_traits),
+                        json.dumps(option_b_traits),
+                    ),
+                )
+                row = cur.fetchone()
+                if row:
+                    return row["share_token"]
+    raise RuntimeError("Could not allocate share token")
+
+
+def get_shared_round(share_token: str, voter_uid: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Fetch a shared round plus vote totals and caller's own vote, if any."""
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    s.share_token,
+                    s.prompt_text,
+                    s.option_a_reply,
+                    s.option_b_reply,
+                    s.option_a_traits_json,
+                    s.option_b_traits_json,
+                    s.created_at,
+                    COALESCE(SUM(CASE WHEN v.voted_option = 'A' THEN 1 ELSE 0 END), 0) AS votes_a,
+                    COALESCE(SUM(CASE WHEN v.voted_option = 'B' THEN 1 ELSE 0 END), 0) AS votes_b
+                FROM shared_rounds s
+                LEFT JOIN shared_round_votes v ON v.share_token = s.share_token
+                WHERE s.share_token = %s
+                GROUP BY s.share_token, s.prompt_text, s.option_a_reply, s.option_b_reply,
+                         s.option_a_traits_json, s.option_b_traits_json, s.created_at
+                """,
+                (share_token,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+
+            viewer_vote = None
+            if voter_uid:
+                cur.execute(
+                    "SELECT voted_option FROM shared_round_votes WHERE share_token = %s AND voter_uid = %s",
+                    (share_token, voter_uid),
+                )
+                vote_row = cur.fetchone()
+                if vote_row:
+                    viewer_vote = vote_row["voted_option"]
+
+    return {
+        "share_token": row["share_token"],
+        "prompt": row["prompt_text"],
+        "option_a": {
+            "reply": row["option_a_reply"],
+            "traits": json.loads(row["option_a_traits_json"]),
+            "votes": row["votes_a"],
+        },
+        "option_b": {
+            "reply": row["option_b_reply"],
+            "traits": json.loads(row["option_b_traits_json"]),
+            "votes": row["votes_b"],
+        },
+        "total_votes": row["votes_a"] + row["votes_b"],
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        "viewer_vote": viewer_vote,
+    }
+
+
+def record_shared_round_vote(share_token: str, option: str, voter_uid: str) -> str:
+    """
+    Record one vote per (shared round, voter).
+
+    Returns one of: 'recorded', 'already_voted', 'not_found'.
+    """
+    if option not in ("A", "B"):
+        return "not_found"
+
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO shared_round_votes (share_token, voter_uid, voted_option)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (share_token, voter_uid) DO NOTHING
+                """,
+                (share_token, voter_uid, option),
+            )
+            if cur.rowcount > 0:
+                return "recorded"
+
+            cur.execute("SELECT 1 FROM shared_rounds WHERE share_token = %s", (share_token,))
+            if not cur.fetchone():
+                return "not_found"
+
+            return "already_voted"
+
+
+def list_top_shared_rounds_today(limit: int = 10) -> List[Dict[str, Any]]:
+    """Top shared rounds by votes cast today (UTC day boundary)."""
+    bounded_limit = max(1, min(int(limit), 25))
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                WITH today_votes AS (
+                    SELECT
+                        share_token,
+                        COUNT(*) AS votes_today,
+                        MAX(created_at) AS last_vote_at
+                    FROM shared_round_votes
+                    WHERE (created_at AT TIME ZONE 'UTC')::date = (now() AT TIME ZONE 'UTC')::date
+                    GROUP BY share_token
+                ),
+                all_votes AS (
+                    SELECT share_token, COUNT(*) AS total_votes
+                    FROM shared_round_votes
+                    GROUP BY share_token
+                )
+                SELECT
+                    s.share_token,
+                    s.prompt_text,
+                    t.votes_today,
+                    t.last_vote_at,
+                    COALESCE(a.total_votes, 0) AS total_votes
+                FROM shared_rounds s
+                JOIN today_votes t ON t.share_token = s.share_token
+                LEFT JOIN all_votes a ON a.share_token = s.share_token
+                ORDER BY t.votes_today DESC, t.last_vote_at DESC
+                LIMIT %s
+                """,
+                (bounded_limit,),
+            )
+            rows = cur.fetchall()
+
+    return [
+        {
+            "share_token": row["share_token"],
+            "prompt": row["prompt_text"],
+            "votes_today": row["votes_today"],
+            "total_votes": row["total_votes"],
+            "last_vote_at": row["last_vote_at"].isoformat() if row["last_vote_at"] else None,
+        }
+        for row in rows
+    ]
 
 
 def _fetch_glicko_rounds(cur) -> List[glicko.Round]:
