@@ -600,8 +600,14 @@ def regenerate_agent_reply(agent_id):
         return jsonify({'success': False, 'error': str(e)}), 400
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
-    except (APIConnectionError, APITimeoutError, RateLimitError, APIStatusError, LLMEmptyReplyError):
-        return jsonify({'success': False, 'error': LLM_UNAVAILABLE_MESSAGE}), 503
+    except APIStatusError as e:
+        print(f"LLM ERROR: {type(e).__name__}: {e}", flush=True)
+        print(f"STATUS: {e.status_code}", flush=True)
+        print(f"RESPONSE: {e.response}", flush=True)
+        return jsonify({'success': False, 'error': f'{type(e).__name__}: {str(e)}'}), 503
+    except (APIConnectionError, APITimeoutError, LLMEmptyReplyError) as e:
+        print(f"LLM ERROR: {type(e).__name__}: {e}", flush=True)
+        return jsonify({'success': False, 'error': f'{type(e).__name__}: {str(e)}'}), 503
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
