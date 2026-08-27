@@ -711,6 +711,7 @@ def create_arena_round():
     image (validated, never stored server-side) and appends the round to a
     session-owned chat (optional chat_id) for later switching/reload.
     """
+    print("=== ARENA ROUND STARTED ===", flush=True)
     try:
         data = request.json or {}
         message = data.get('message', '')
@@ -741,11 +742,16 @@ def create_arena_round():
         traits_a, traits_b, emotion_option = _select_arena_teams(available, ratings)
         agent_a = _build_arena_agent("Arena Option A", traits_a)
         agent_b = _build_arena_agent("Arena Option B", traits_b)
+        
+        print("=== ABOUT TO CALL LLMs ===", flush=True)
 
         future_a = _arena_executor.submit(agent_a.generate_llm_reply, message, False, image_data_url, model_id)
         future_b = _arena_executor.submit(agent_b.generate_llm_reply, message, False, image_data_url, model_id)
         reply_a, tokens_a = future_a.result()
         reply_b, tokens_b = future_b.result()
+        
+        print("=== BOTH LLMs COMPLETED ===", flush=True)
+        
         quota_store.charge(uid, tokens_a + tokens_b)
 
         round_id = analytics_store.record_round(traits_a, reply_a, traits_b, reply_b)
