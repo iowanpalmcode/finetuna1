@@ -47,14 +47,17 @@ MODEL_CHOICES: Dict[str, Dict[str, str]] = {
         "label": "Nemotron 3 Nano",
         "model": os.environ.get("OPENROUTER_MODEL_NEMOTRON") or _DEFAULT_NEMOTRON_MODEL,
     },
-    "gpt-oss-20b": {"label": "GPT-OSS 20B", "model": os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODEL},
-    "gemma-4-26b-a4b": {
-        "label": "Gemma 4 26B A4B",
+    "lfm-2.5-embedding-350m": {
+        "label": "LFM 2.5 Embedding 350M",
+        "model": os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODEL,
+    },
+    "gemma-4-31b-it": {
+        "label": "Gemma 4 31B IT",
         "model": os.environ.get("OPENROUTER_MODEL_GEMMA") or _DEFAULT_GEMMA_MODEL,
     },
-    "ling-3.0-flash": {
-        "label": "Ling-3.0 Flash",
-        "model": os.environ.get("OPENROUTER_MODEL_LING") or _DEFAULT_LING_MODEL,
+    "inkling-small": {
+        "label": "Inkling Small",
+        "model": os.environ.get("OPENROUTER_MODEL_INKLING") or _DEFAULT_INKLING_MODEL,
     },
 }
 DEFAULT_MODEL_ID = "nemotron-3-nano"
