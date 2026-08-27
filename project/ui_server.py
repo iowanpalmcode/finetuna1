@@ -609,7 +609,8 @@ def regenerate_agent_reply(agent_id):
         print(f"LLM ERROR: {type(e).__name__}: {e}", flush=True)
         return jsonify({'success': False, 'error': f'{type(e).__name__}: {str(e)}'}), 503
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
+        print(f"ARENA UNEXPECTED ERROR: {type(e).__name__}: {e}", flush=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 def _build_arena_agent(name: str, trait_names: list[str]) -> AIAgent:
