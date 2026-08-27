@@ -5,9 +5,7 @@ const THINKING_MESSAGES = [
     'How many of these are there?',
     'Working on Calculus homework…',
     'Figuring out the secret to life, the universe, and everything…',
-    'Asking the AI to be nice to you…',
-    'Asking the AI to be mean to you…',
-    'Say “please” and “thank you” to the AI…',
+    'Say “please” and “thank you” to the AI…'
 ];
 const TOUR_KEY = 'aimotional_arena_tour_done';
 
