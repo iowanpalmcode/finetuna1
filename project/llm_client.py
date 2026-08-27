@@ -21,7 +21,7 @@ load_dotenv()
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 PLACEHOLDER_KEY = "your-api-key-here"
-DEFAULT_MODEL = "openai/gpt-oss-20b:free"
+DEFAULT_MODEL = "liquid/lfm-2.5-embedding-350m:free"
 
 # Best-effort default - free vision-capable models on OpenRouter change over
 # time, so this is meant to be overridden via OPENROUTER_VISION_MODEL once a
@@ -32,9 +32,9 @@ DEFAULT_VISION_MODEL = "meta-llama/llama-3.2-11b-vision-instruct:free"
 # DEFAULT_VISION_MODEL above - free-tier slugs get renamed/deprecated on
 # OpenRouter periodically, so each has its own env var override rather than
 # being baked in with no escape hatch.
-_DEFAULT_NEMOTRON_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
-_DEFAULT_GEMMA_MODEL = "google/gemma-4-26b-a4b-it:free"
-_DEFAULT_LING_MODEL = "inclusionai/ling-3.0-flash:free"
+_DEFAULT_NEMOTRON_MODEL = "nvidia/nemotron-3.5-lightning:free"
+_DEFAULT_GEMMA_MODEL = "google/gemma-4-31b-it:free"
+_DEFAULT_INKLING_MODEL = "thinkingmachines/inkling-small:free"
 
 # User-selectable text models (see the Settings modal). Keys are the stable
 # ids used in requests/localStorage - safe to reorder or relabel without
