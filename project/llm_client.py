@@ -21,7 +21,7 @@ load_dotenv()
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 PLACEHOLDER_KEY = "your-api-key-here"
-DEFAULT_MODEL = "liquid/lfm-2.5-embedding-350m:free"
+DEFAULT_MODEL = "liquid/lfm-2.5-2.6b:free"
 
 # Best-effort default - free vision-capable models on OpenRouter change over
 # time, so this is meant to be overridden via OPENROUTER_VISION_MODEL once a
@@ -47,8 +47,8 @@ MODEL_CHOICES: Dict[str, Dict[str, str]] = {
         "label": "Nemotron 3 Nano",
         "model": os.environ.get("OPENROUTER_MODEL_NEMOTRON") or _DEFAULT_NEMOTRON_MODEL,
     },
-    "lfm-2.5-embedding-350m": {
-        "label": "LFM 2.5 Embedding 350M",
+    "lfm-2.5-2.6": {
+        "label": "LFM 2.5-2.6",
         "model": os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODEL,
     },
     "gemma-4-31b-it": {
@@ -70,7 +70,7 @@ DEFAULT_MODEL_ID = "nemotron-3-nano"
 # backoff = 2*45 + 1.5 = 91.5s, still under gunicorn's request timeout (see
 # render.yaml) even with both Arena sides in flight - a 3rd attempt would
 # push that past what's safe (see _get_client_and_model's timeout comment).
-_MAX_RETRIES = 1
+_MAX_RETRIES = 2
 _RETRY_BASE_DELAY_SECONDS = 1.5
 _RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
