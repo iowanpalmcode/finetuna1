@@ -748,14 +748,14 @@ def create_arena_round():
         future_a = _arena_executor.submit(agent_a.generate_llm_reply, message, False, image_data_url, model_id)
         future_b = _arena_executor.submit(agent_b.generate_llm_reply, message, False, image_data_url, model_id)
         try:
-            reply_a, tokens_a = future_a.result()
+            reply_a, tokens_a = future_a.result(timeout=60)
             print("=== AGENT A COMPLETED ===", flush=True)
         except Exception as e:
             print(f"=== AGENT A FAILED === {type(e).__name__}: {e}", flush=True)
             raise
 
         try:
-            reply_b, tokens_b = future_b.result()
+            reply_b, tokens_b = future_b.result(timeout=60)
             print("=== AGENT B COMPLETED ===", flush=True)
         except Exception as e:
             print(f"=== AGENT B FAILED === {type(e).__name__}: {e}", flush=True)

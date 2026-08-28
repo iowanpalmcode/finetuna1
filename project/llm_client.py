@@ -185,7 +185,7 @@ def _get_client_and_model(needs_vision: bool = False, model_id: Optional[str] = 
     # from 30s) to give the larger _MAX_REPLY_TOKENS cap enough room for a
     # slower free-tier model to actually finish generating it rather than
     # timing out before reaching a natural stopping point.
-    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key, timeout=45.0, max_retries=0)
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key, timeout=60, max_retries=0)
     return client, model
 
 
