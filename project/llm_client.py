@@ -33,7 +33,7 @@ DEFAULT_VISION_MODEL = "meta-llama/llama-3.2-11b-vision-instruct:free"
 # OpenRouter periodically, so each has its own env var override rather than
 # being baked in with no escape hatch.
 _DEFAULT_NEMOTRON_MODEL = "nvidia/nemotron-3.5-lightning:free"
-_DEFAULT_GEMMA_MODEL = "google/gemma-4-31b-it:free"
+_DEFAULT_LING_MODEL = "inclusionai/ling-3.0-flash-fin:free"
 _DEFAULT_INKLING_MODEL = "thinkingmachines/inkling-small:free"
 
 # User-selectable text models (see the Settings modal). Keys are the stable
@@ -51,9 +51,9 @@ MODEL_CHOICES: Dict[str, Dict[str, str]] = {
         "label": "LFM 2.5-2.6",
         "model": os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODEL,
     },
-    "gemma-4-31b-it": {
-        "label": "Gemma 4 31B IT",
-        "model": os.environ.get("OPENROUTER_MODEL_GEMMA") or _DEFAULT_GEMMA_MODEL,
+    "ling-3.0-flash-fin": {
+        "label": "Ling 3.0 Flash Fin",
+        "model": os.environ.get("OPENROUTER_MODEL_LING") or _DEFAULT_LING_MODEL,
     },
     "inkling-small": {
         "label": "Inkling Small",
