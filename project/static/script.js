@@ -13,7 +13,7 @@ const TOUR_KEY = 'aimotional_arena_tour_done';
 // Settings modal's #modelSelect - there's no server round-trip for this
 // small, rarely-changing list (same approach as the theme picker).
 const MODEL_STORAGE_KEY = 'aimotional_model_id';
-const DEFAULT_MODEL_ID = 'nemotron-3-nano';
+const DEFAULT_MODEL_ID = 'lfm-2.5-2.6';
 
 function getSelectedModelId() {
     return localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_MODEL_ID;

@@ -60,7 +60,7 @@ MODEL_CHOICES: Dict[str, Dict[str, str]] = {
         "model": os.environ.get("OPENROUTER_MODEL_INKLING") or _DEFAULT_INKLING_MODEL,
     },
 }
-DEFAULT_MODEL_ID = "nemotron-3-nano"
+DEFAULT_MODEL_ID = "lfm-2.5-2.6"
 
 # OpenRouter's free-tier backing providers occasionally throw a transient
 # 429/5xx ("temporarily rate-limited upstream, please retry shortly") that
