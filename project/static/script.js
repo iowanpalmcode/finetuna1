@@ -11,8 +11,9 @@ const TOUR_KEY = 'aimotional_arena_tour_done';
 
 // Must match llm_client.DEFAULT_MODEL_ID and the <option> values in the
 // Settings modal's #modelSelect - there's no server round-trip for this
-// small, rarely-changing list (same approach as the theme picker).
-const MODEL_STORAGE_KEY = 'aimotional_model_id';
+// small, rarely-changing list (same approach as the theme picker). The
+// versioned key migrates browsers that still have the old Nemotron default.
+const MODEL_STORAGE_KEY = 'aimotional_model_id_v2';
 const DEFAULT_MODEL_ID = 'lfm-2.5-2.6';
 
 function getSelectedModelId() {
